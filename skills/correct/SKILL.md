@@ -29,7 +29,7 @@ Group them into classes. A class counts once it has happened twice. Report each 
    - Go: `depguard`, `forbidigo`, custom `go vet` analyzers, internal packages, unexported types, an architecture test that parses imports.
    - TypeScript: ESLint `no-restricted-imports` and `no-restricted-syntax`, `strict` flags, branded types, `dependency-cruiser`, a codemod plus a CI check.
 3. **Test the behavior.** Fix or delete any test that still passes when the behavior it checks breaks, or that fails when only internals change.
-4. **Hook it.** If it must hold during the session, not just in CI, add it to the repo's `verify` or `quick` command in `.t4l/config`, so the harness runs it and the agent cannot skip it.
+4. **Hook it.** If it must hold during the session, not just in CI, make the harness run it so the agent cannot skip it. The hooks read `.t4l/config` (KEY=VALUE lines): `quick=` runs after each edit of a file whose extension is in `quick_ext=`, `verify=` runs before the turn ends. If the file does not exist, run `sh "$T4L_ROOT/scripts/t4l-init.sh"` (the path is in the `T4L_ROOT=` line at the top of the session context) to create it from the detected stack, then append the new check to `verify=` with `&&`. If `T4L_ROOT` is not available, tell the user to run `/t4l:init` instead of guessing the format.
 5. **Write docs or rules last, and only for judgment calls** that no tool can check.
 
 For each class, state the level you chose and why a higher one did not work.
