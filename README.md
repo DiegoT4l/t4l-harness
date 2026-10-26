@@ -14,18 +14,18 @@ Ninguno convence por completo. Este repo decide, pieza por pieza, qué se adopta
 
 ```
 .claude-plugin/  manifest del plugin
-rules/           kernel que se carga en cada sesión (t4l.md)
+rules/           kernel que se inyecta en cada sesión (t4l.md)
 skills/          t4l (router + playbooks), init, correct
-hooks/           hooks.json + scripts POSIX sh
-scripts/         t4l-init.sh
-agents/          subagentes (v0.3)
-tests/           sh tests/hooks.sh
+agents/          implementer, judge, reviewer
+hooks/           hooks.json + scripts POSIX sh (guard, verificación, kernel)
+scripts/         t4l-init, t4l-task, t4l-regress
+tests/           hooks.sh, regress.sh, task.sh
 docs/            referencias, diseño, cómo probar
 ```
 
 ## Estado
 
-**v0.2.** Kernel, router `t4l` con selector de método (ODD / TDD / SDD), playbooks `investigate` y `bug`, hooks de verificación opt-in (`/t4l:init`) y `/t4l:correct`. Agentes y carril grande completo llegan en la v0.3 (ver `docs/design.md`).
+**v0.3.** Kernel, router `t4l` con selector de método (ODD / TDD / SDD), playbooks `investigate`, `bug`, `feature`, `refactor` y `ship`, hooks de verificación opt-in (`/t4l:init`), `/t4l:correct`, chequeo de regresión (`t4l-regress.sh` con `{edge}`) y carril grande completo: documento de feature gestionado por `t4l-task.sh`, hook `guard` (puerta SDD y lead que no implementa) y agentes `implementer`, `judge` y `reviewer`. El `workflow-master` (tablero Kanban, worktrees, paralelismo e integración) llega en la v0.4; ver `docs/design.md`.
 
 ## Probar
 
@@ -33,7 +33,7 @@ docs/            referencias, diseño, cómo probar
 cd ~/t4l-sandbox && claude --plugin-dir ~/t4l-harness
 ```
 
-Escenarios y qué observar en [`docs/testing.md`](docs/testing.md). Tests de los scripts: `sh tests/hooks.sh`.
+Escenarios y qué observar en [`docs/testing.md`](docs/testing.md). Tests de los scripts: `sh tests/hooks.sh && sh tests/regress.sh && sh tests/task.sh`.
 
 ## Restricciones heredadas del entorno
 

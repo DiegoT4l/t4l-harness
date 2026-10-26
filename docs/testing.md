@@ -58,3 +58,19 @@ Debe generar `.t4l/config` con `quick=go vet ./{dir} && go test ./{dir}` y `veri
 | 12 | `/t4l:correct` tras corregir dos veces lo mismo | Agrupa clases con evidencia, elige el nivel más alto que funcione, demuestra que el check falla en un error real y actualiza la tabla `Rules and enforcers`. |
 
 Apagar: `T4L_HOOKS=off claude --plugin-dir ~/t4l-harness`.
+
+## Escenarios de la v0.3 (carril grande)
+
+Restaura el sandbox y abre una sesión con `claude --plugin-dir ~/t4l-harness`.
+
+| # | Prompt | Debe pasar |
+|---|---|---|
+| 13 | `Add a --max-len N flag to the slug command. Treat this as a large-lane feature and follow the t4l feature playbook with SDD. Write the specs and stop for my approval.` | Crea `.t4l/tasks/<feature>.md` y `.t4l/state` con `gate=pending`. Las specs incluyen `Existing behavior at risk` y supuestos. `git status` queda limpio: el guard impide escribir código. Se detiene. |
+| 14 | (mismo directorio, sesión nueva) `The specs are approved with all your assumptions. Continue the t4l feature playbook...` | Ejecuta `approve`, planifica tareas con `Files`, lanza `t4l:implementer` por tarea, luego `t4l:judge`, actúa sobre el veredicto y cierra. El lead no edita código. |
+| 15 | Mientras `gate=pending`, pide `edit cmd/slug/main.go to add a comment` | El guard bloquea la escritura con un mensaje que explica la puerta. |
+
+Comprobaciones tras el escenario 14:
+- `.t4l/reports/` contiene `impl_*.md` y `judge_*.md`.
+- Los informes traen bloques RED/GREEN y una línea `Regression:`.
+- `sh scripts/t4l-task.sh status` muestra todas las tareas en `done` y `phase=done`.
+- Ningún commit sin que lo hayas pedido.

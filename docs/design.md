@@ -21,7 +21,7 @@ Fusión de pstack (criterio), gentle-ai (enrutado y contexto) y uncle-bob (puert
 ├──────────────────────────────────────────────────────────────┤
 │ 4. ENFORCEMENT  hooks + scripts + tabla regla↔enforcer        │
 ├──────────────────────────────────────────────────────────────┤
-│ 3. AGENTES      explorer · implementer · judge · reviewer     │
+│ 3. AGENTES      implementer · judge · reviewer (+ Explore)   │
 ├──────────────────────────────────────────────────────────────┤
 │ 2. PLAYBOOKS    investigate · bug · feature · refactor ·      │
 │                 perf · ship · babysit · pickup                │
@@ -118,15 +118,15 @@ Cada uno es un `.md` corto: pasos, qué se delega, qué evidencia exige, formato
 
 Fuera de v1: `prototype`, `hillclimb`, `visual-parity`, `eval`, `autopilot-*`, `orchestrate`, `worktree-cleanup`, `trace-forensics`, `runtime-forensics`.
 
-### Capa 3 — Agentes (4, todos con contexto fresco)
+### Capa 3 — Agentes (3 propios, todos con contexto fresco)
 
 | Agente | Herramientas | Rol | Escribe |
 |---|---|---|---|
-| `explorer` | solo lectura | Mapear código; devuelve ≤2k tokens con `path:línea` | informe en `.t4l/reports/` |
 | `implementer` | lectura + escritura | Una tarea del documento, test-first; recibe **referencia** al documento y las `S#` | código, tests, bitácora de ciclos |
 | `judge` | solo lectura + Bash | Aprueba o poda: cobertura de escenarios, disciplina TDD, calidad, `t4l verify` verde | `.t4l/reports/judge_<feature>.md` |
 | `reviewer` | solo lectura | Una lente por invocación (`risk`/`reliability`/`readability`/`resilience`), con precision gate, un barrido, ledger de hallazgos | ledger en `.t4l/reports/` |
 
+- Para explorar se usa el `Explore` integrado (devuelve ≤2k tokens con `path:línea`); no hay agente propio.
 - El **lead** (la sesión principal) orquesta y verifica. En carril grande no implementa; en carril pequeño sí, inline.
 - Un `refuter` no es agente aparte: el `judge` re-verifica los hallazgos graves **solo inferenciales** del `reviewer` antes de aceptarlos.
 - La mutación **no es un agente**: es un script determinista; el `judge` interpreta los sobrevivientes.
@@ -239,6 +239,12 @@ Plugin de Claude Code `t4l` (carpeta `plugin/` con `.claude-plugin/plugin.json`,
 | 5 | Scripts | POSIX sh en v1; un CLI Go solo si los scripts se vuelven frágiles. |
 | 6 | Estado por repo | `.t4l/` ignorado por git; documento de feature espejado en Engram. |
 | 7 | Alcance de instalación | Global con kernel mínimo; playbooks bajo demanda. |
+| 8 | Modelo del `judge` | Opus con esfuerzo alto. `implementer` y `reviewer` con Sonnet. |
+| 9 | `guard-lead` | Bloqueo duro con salida de emergencia `T4L_GUARD=off`. Solo cubre Edit/Write, no escrituras por Bash. |
+| 10 | Implementadores en v0.3 | Uno a la vez. El paralelismo llega con el `workflow-master` (v0.4). |
+| 11 | Explorador | Se usa el `Explore` integrado; no hay agente propio. |
+| 12 | `reviewer` | Solo con riesgo alto o más de ~400 líneas, una lente por invocación. |
+| 13 | `workflow-master` | v0.4. Kanban solo (sin Scrum). Fusiona en la rama de la feature; el merge a `main` y el push son del usuario. WIP por defecto 2. |
 
 ### Pendientes
 
@@ -252,11 +258,33 @@ Plugin de Claude Code `t4l` (carpeta `plugin/` con `.claude-plugin/plugin.json`,
 
 - **v0.1 — Kernel y router.** `rules/t4l.md` en inglés, skill `t4l` con clasificación, carriles y selector de método (ODD / TDD / SDD), playbooks `investigate` y `bug`.
 - **v0.2 — Enforcement (hecha).** Hooks `post-edit-check` y `stop-verify`, `.t4l/config`, `/t4l:init`, `/t4l:correct` y tabla regla↔enforcer. 31 tests de shell (`sh tests/hooks.sh`), `shellcheck` limpio, y comprobado en una ejecución real de Claude Code.
-- **v0.3 — Carril grande.** Documento de feature, agentes `implementer`/`judge`/`reviewer`, puerta humana, `feature`, `refactor`, `ship`.
-- **v0.4 — Medición.** Checkpoints y journeys; mutación opcional; `perf`, `babysit`, `pickup`.
+- **v0.3 — Carril grande (en curso).** `scripts/t4l-task.sh` (estado y coherencia del documento de feature), marcador `.t4l/state`, hook `guard` (puerta SDD y lead que no implementa), agentes `implementer`, `judge` y `reviewer`, playbooks `feature`, `refactor` y `ship`. Un implementador a la vez. Las tareas ya llevan `Status`, `Deps` y `Files` para que el tablero de la v0.4 no requiera migrar nada.
+- **v0.4 — `workflow-master`.** Ver la sección 10.
+- **v0.5 — Medición.** Checkpoints y journeys; mutación opcional; `perf`, `babysit`, `pickup`.
 - **v1.0 — Plugin.** Empaquetado, `t4l:setup`, marketplace propio, documentación.
 
-## 10. Riesgos
+## 10. `workflow-master` (v0.4)
+
+**Propósito acotado:** que varios subagentes trabajen a la vez sin pisarse, que ninguno se salga de su alcance y que las rebanadas de PR no crezcan sin control. No es Scrum: no hay sprints, dailies ni estimaciones. Es un tablero Kanban y tres contratos que se hacen cumplir con scripts y hooks.
+
+| Problema | Contrato | Cómo se hace cumplir |
+|---|---|---|
+| Se pisan entre sí | Cada tarea declara `Files:` (globs) y `Deps:`. Dos tareas con globs que se solapan no pueden estar en `doing` a la vez. Los archivos compartidos (`go.mod`, `package.json`, lockfiles) se serializan: una sola tarea los toca. | `t4l-task.sh start` rechaza el solape. Cada tarea trabaja en su propio worktree. |
+| Se salen del alcance | El agente solo escribe dentro de los `Files:` de su tarea. | El hook `guard` identifica el worktree de la tarea y deniega escrituras fuera de sus globs con un mensaje que nombra a la tarea dueña y dice a quién pedir una ampliación. |
+| PRs demasiado largos | Presupuesto por rebanada (`slice_budget`, ~400 líneas de cambio propio, sin generados ni lockfiles). | `t4l-size.sh` mide la rama contra su base. Un hook avisa al 80 % y el `workflow-master` propone dividir en una pila de PRs al superar el presupuesto. Es una advertencia, no un tope duro. |
+| La integración falla aunque cada rebanada pase | Se integra en una rama aparte. | `t4l-integrate.sh` fusiona en orden de dependencias, ejecuta `verify` y `t4l-regress.sh` sobre el resultado fusionado contra la base, y el `judge` revisa el diff integrado. |
+
+**Tablero:** columnas `todo → doing → review → done`, con límite WIP por defecto 2 (`wip=` en `.t4l/config`). Se tira de `todo` solo si hay hueco y las dependencias están en `done`.
+
+**Reparto de trabajo:** los scripts hacen lo mecánico (solapes, límites, worktrees, orden de merge, medición); el agente decide el grafo de tareas, qué es realmente disjunto, cómo resolver un conflicto y escribe el informe en `.t4l/reports/`.
+
+**Límites de autoridad:** no escribe código de producto, no aprueba specs, no hace merge a `main` ni push.
+
+**Reutiliza lo que existe:** `isolation: worktree` de la herramienta `Agent` para los subagentes de Claude, y `pi-workers` para el trabajo mecánico masivo.
+
+**Comprobado:** un subagente puede lanzar otros subagentes (prueba con un agente coordinador y los transcripts), y los hooks reciben `agent_id` y `agent_type` de cada llamada, vacíos para el lead.
+
+## 11. Riesgos
 
 - **Sobreingeniería:** vimos tres harnesses grandes. Mitigación: el kernel tiene tope de líneas y cada playbook nuevo debe ganarse su lugar con un journey que falle sin él.
 - **Cumplimiento por el modelo:** las reglas en prosa se ignoran. Mitigación: hooks y scripts primero, prosa después.
