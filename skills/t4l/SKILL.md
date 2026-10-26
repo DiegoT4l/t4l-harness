@@ -60,24 +60,29 @@ Rules:
 | Explain, investigate, review, propose | `playbooks/investigate.md` | none (read-only) |
 | Bug with a deterministic repro | `playbooks/bug.md` | ODD + TDD |
 | Bug without a repro yet | `playbooks/bug.md`, reproduce step | ODD only until reproduced, then TDD |
+| New or changed behavior that fails the resume test | `playbooks/feature.md` | ODD + SDD or ODD + TDD |
+| Behavior-preserving change of structure | `playbooks/refactor.md` | ODD + TDD (characterization first) |
+| Commit, branch or open a PR | `playbooks/ship.md` | ODD only |
 | Anything else | no playbook yet: apply the kernel and the mode procedure above | per section 4 |
 
-Related skills: `/t4l:init` enables the verification hooks in a repo; `/t4l:correct` turns repeated corrections into enforced structure. Playbooks for feature, refactor, perf, ship, babysit and pickup are planned (see `docs/design.md`).
+Related skills: `/t4l:init` enables the verification hooks in a repo; `/t4l:correct` turns repeated corrections into enforced structure. Playbooks for perf, babysit and pickup are planned (see `docs/design.md`).
 
-## 6. Large lane (v0.1)
+## 6. Large lane
 
-Create `.t4l/tasks/<feature>.md` from `references/feature-doc.md`. In v0.1 the lead implements inline; dedicated `implementer`, `judge` and `reviewer` agents arrive in v0.3.
+Follow `playbooks/feature.md`. The feature document and the state are managed by `scripts/t4l-task.sh` (`new`, `approve`, `add`, `start`, `review`, `done`, `reopen`, `log`, `status`, `check`, `close`); the template is in `references/feature-doc.md`. Do not edit the task table or `.t4l/state` by hand.
 
+- The lead plans, delegates and verifies. It does not edit project files: the hook `guard` blocks it while the feature is `implementing`. Each task goes to a `t4l:implementer`, and the finished feature to a `t4l:judge`; `t4l:reviewer` runs one lens per launch when the risk is high or the diff is large.
+- A brief to an agent contains the document path, the task ID, `T4L_ROOT` and what the agent needs to know to commit. Never a paraphrase of the request.
 - Specs quote the user's exact strings, error messages and examples verbatim.
-- `L1` in the log is the original request, verbatim. Later corrections and evidence are appended.
-- A requirement change rewrites only the affected specs and reopens only their tasks.
+- `L1` in the log is the original request, verbatim. Later corrections and evidence are appended with `t4l-task.sh log`.
+- A requirement change rewrites only the affected specs and reopens only their tasks (`t4l-task.sh reopen`).
 - Mirror the document to Engram under topic `t4l/<feature>/tasks`, then read it back: the two writes are not atomic.
-- Check a task off only with observed proof.
-- Commit in reviewable units of about 400 changed lines, tests and docs alongside the behavior, Conventional Commit messages. The 400 is a planning heuristic: never split artificially or delete comments and blank lines to hit it.
+- Mark a task `done` only after the judge approves, with observed proof.
+- Commit in reviewable units of about 400 changed lines (playbook `ship`). The 400 is a planning heuristic: never split artificially or delete comments and blank lines to hit it.
 
 ### Approval gate (SDD only)
 
-After the specs are written, stop and ask the user to approve or change them. Do not write production code before approval. In ODD + TDD and ODD only there is no gate.
+After the specs are written, stop and ask the user to approve or change them. Do not write production code before approval. In the large lane the hook `guard` enforces this: with `gate=pending` nothing outside `.t4l/` can be written, and `t4l-task.sh approve` is run only after the user's explicit approval. In ODD + TDD and ODD only there is no gate.
 
 **Inline SDD (small lane).** When the resume test says small, skip the task document and the Engram mirror. Write the specs in the reply:
 

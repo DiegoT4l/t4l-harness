@@ -6,7 +6,6 @@ Create at `.t4l/tasks/<feature-name>.md`. Subagents read it by reference, in thi
 # <feature-name>
 
 Mode: <ODD only | ODD + TDD | ODD + SDD>   Lane: large
-Branch: <branch>   Delivery: <single PR | chained slices>   Status: <specs | approved | implementing | verifying | done>
 
 ## Specs
 
@@ -25,15 +24,17 @@ S2. ...
 
 ## Tasks
 
-| ID | Spec | Route | Status | Commit |
-|----|------|-------|--------|--------|
-| T1 | S1   | inline | todo  |        |
+| ID | Spec | Status | Deps | Files | Commit |
+|----|------|--------|------|-------|--------|
+| T1 | S1   | todo   | -    | src/** | -      |
 
 ## Log
 
 L1. <the user's original request, verbatim>
 L2. <later correction, evidence or rationale, appended in order>
 ```
+
+`scripts/t4l-task.sh` creates this document and edits the Tasks table; `.t4l/state` holds the machine state (feature, mode, gate, phase) that the hook `guard` reads. Status is one of `todo`, `doing`, `review`, `done`. `Files` are globs the task may touch (`-` when not declared). `Deps` are task IDs that must be `done` first.
 
 Rules:
 - A requirement change rewrites only the affected spec and reopens only its tasks, with a reason in the log.

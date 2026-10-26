@@ -14,7 +14,7 @@ Always-on rules. Keep this file under 150 lines. Anything that does not change b
 After a proportionate exploration, ask: could someone resume this from the request plus `git diff`, with contained risk?
 
 - Yes: **small**. Work inline. No subagents, no task document.
-- No: **large**. Create one feature document (`.t4l/tasks/<feature>.md`) and mirror it to Engram before the first source write.
+- No: **large**. Follow the `feature` playbook: open the feature with `t4l-task.sh new` (document `.t4l/tasks/<feature>.md` plus state), mirror it to Engram before the first source write. In this lane the lead does not edit project files (a hook blocks it): it delegates each task to the `t4l:implementer` agent and the finished feature to `t4l:judge`. A brief names the document path, the task ID and `T4L_ROOT`; subagents do not see this kernel.
 
 Never classify by file count, command count or because a todo list was requested.
 
