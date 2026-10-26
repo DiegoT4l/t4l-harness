@@ -214,6 +214,72 @@ RC=$?
 case $OUT in *"# t4l kernel"*) RC=1 ;; esac
 check "start: T4L_KERNEL=off skips the kernel body" 0 "T4L_ROOT="
 
+# --- guard ------------------------------------------------------------------
+
+GUARD="$HERE/hooks/guard.sh"
+
+# run_guard <file> [agent_type]
+run_guard() {
+	if [ -n "${2:-}" ]; then
+		OUT=$(printf '{"cwd":"%s","agent_type":"%s","agent_id":"a1","tool_input":{"file_path":"%s"}}' "$R" "$2" "$1" | sh "$GUARD" 2>&1)
+	else
+		OUT=$(printf '{"cwd":"%s","tool_input":{"file_path":"%s"}}' "$R" "$1" | sh "$GUARD" 2>&1)
+	fi
+	RC=$?
+}
+
+write_state() { # gate phase
+	printf 'feature=f\nmode=sdd\ngate=%s\nphase=%s\n' "$1" "$2" >"$R/.t4l/state"
+}
+
+new_repo
+run_guard "src/a.go"
+check "guard: no state file allows everything" 0
+
+new_repo
+write_state pending specs
+run_guard "src/a.go"
+check "guard: gate pending blocks the lead" 2 "not approved"
+run_guard "src/a.go" "t4l:implementer"
+check "guard: gate pending blocks subagents too" 2 "not approved"
+run_guard ".t4l/tasks/f.md"
+check "guard: gate pending still allows .t4l/ files" 0
+run_guard "$R/.t4l/tasks/f.md"
+check "guard: absolute .t4l/ path is allowed" 0
+
+new_repo
+write_state approved implementing
+run_guard "src/a.go"
+check "guard: implementing blocks the lead" 2 "t4l:implementer"
+run_guard "src/a.go" "t4l:implementer"
+check "guard: implementing allows the implementer" 0
+run_guard ".t4l/reports/x.md"
+check "guard: implementing allows the lead to write .t4l/" 0
+run_guard "/etc/hosts"
+check "guard: files outside the repo are not guarded" 0
+T4L_GUARD=off run_guard "src/a.go"
+check "guard: T4L_GUARD=off disables" 0
+T4L_NO_JQ=1 run_guard "src/a.go"
+check "guard: works without jq (sed fallback), lead blocked" 2 "t4l:implementer"
+T4L_NO_JQ=1 run_guard "src/a.go" "t4l:implementer"
+check "guard: works without jq, implementer allowed" 0
+
+new_repo
+write_state approved implementing
+run_guard "src/a.go" "t4l:judge"
+check "guard: the judge cannot write project files" 2 "read-only"
+run_guard ".t4l/reports/judge_f.md" "t4l:judge"
+check "guard: the judge can write its report" 0
+run_guard ".t4l/tasks/f.md" "t4l:reviewer"
+check "guard: the reviewer cannot edit the feature document" 2 "read-only"
+run_guard ".t4l/reports/review_f_risk.md" "t4l:reviewer"
+check "guard: the reviewer can write its report" 0
+
+new_repo
+write_state approved "done"
+run_guard "src/a.go"
+check "guard: phase done allows the lead again" 0
+
 # --- t4l-init --------------------------------------------------------------
 
 # shellcheck disable=SC2120
