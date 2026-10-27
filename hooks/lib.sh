@@ -11,6 +11,7 @@ CFG_QUICK_TIMEOUT=60
 CFG_VERIFY=""
 CFG_VERIFY_TIMEOUT=300
 CFG_DISABLE=""
+CFG_PROTECTED=""
 
 t4l_read_input() {
 	T4L_INPUT=$(cat)
@@ -58,6 +59,7 @@ t4l_load_config() {
 		verify) CFG_VERIFY=$_val ;;
 		verify_timeout) CFG_VERIFY_TIMEOUT=$_val ;;
 		disable) CFG_DISABLE=$_val ;;
+		protected_branches) CFG_PROTECTED=$_val ;;
 		esac
 	done <"$_cfg"
 	case $CFG_QUICK_TIMEOUT in '' | *[!0-9]*) CFG_QUICK_TIMEOUT=60 ;; esac

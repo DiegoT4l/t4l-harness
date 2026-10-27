@@ -280,6 +280,58 @@ write_state approved "done"
 run_guard "src/a.go"
 check "guard: phase done allows the lead again" 0
 
+# --- branch-guard -----------------------------------------------------------
+
+BRANCH="$HERE/hooks/branch-guard.sh"
+
+# run_branch <command>
+run_branch() {
+	OUT=$(printf '{"cwd":"%s","tool_input":{"command":"%s"}}' "$R" "$1" | sh "$BRANCH" 2>&1)
+	RC=$?
+}
+
+new_repo
+run_branch "git commit -m x"
+check "branch: no config is a no-op" 0
+
+new_repo
+write_cfg "verify=true"
+run_branch "git commit -m x"
+check "branch: config without protected_branches is a no-op" 0
+
+new_repo
+write_cfg "protected_branches=main,master"
+run_branch "git commit -m x"
+check "branch: commit on a protected branch is blocked" 2 "protected branch"
+run_branch "git add -A && git commit -m x"
+check "branch: chained add and commit is blocked" 2 "protected branch"
+run_branch "git -C . commit -m x"
+check "branch: git -C commit is blocked" 2 "protected branch"
+run_branch "git -c user.name=a commit -m x"
+check "branch: git -c commit is blocked" 2 "protected branch"
+run_branch "git log --grep commit"
+check "branch: other git commands that mention commit are allowed" 0
+run_branch "git status"
+check "branch: git status is allowed" 0
+run_branch "echo git commit"
+check "branch: echo of a commit is allowed" 0
+run_branch "git switch -c feat/x && git commit -m x"
+check "branch: creating a branch first is allowed" 0
+run_branch "git checkout -b feat/x && git commit -m x"
+check "branch: checkout -b first is allowed" 0
+T4L_ALLOW_PROTECTED=1 run_branch "git commit -m x"
+check "branch: T4L_ALLOW_PROTECTED=1 overrides" 0
+T4L_HOOKS=off run_branch "git commit -m x"
+check "branch: T4L_HOOKS=off disables" 0
+T4L_NO_JQ=1 run_branch "git commit -m x"
+check "branch: works without jq (sed fallback)" 2 "protected branch"
+
+new_repo
+write_cfg "protected_branches=main,master"
+git -C "$R" switch -q -c feat/x
+run_branch "git commit -m x"
+check "branch: commit on a feature branch is allowed" 0
+
 # --- t4l-init --------------------------------------------------------------
 
 # shellcheck disable=SC2120
