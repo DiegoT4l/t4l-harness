@@ -251,7 +251,7 @@ Plugin de Claude Code `t4l` (carpeta `plugin/` con `.claude-plugin/plugin.json`,
 
 | # | Pregunta | Recomendación |
 |---|---|---|
-| A | Mutación | Apagada por defecto; se activa por repo con umbral. Go: `gremlins` o `go-mutesting`. TS: Stryker. |
+| A | Mutación | Resuelto en la v0.5.2 (sección 13): apagada por defecto, `mutation=gremlins` en Go, comando libre para TS, umbral 80 %. |
 | B | Comandos por defecto de verificación | Go: `go test ./... && go vet ./...` y `golangci-lint` si existe. TS: el script `test` y `lint` del `package.json` (detecta pnpm/npm/bun). Configurables en `.t4l/config`. |
 | C | Skills de lenguaje | Referenciar `cc-skills-golang` para Go; para TS, `vercel:react-best-practices` y `vercel:nextjs` cuando el archivo lo pida. Sin duplicarlos. |
 
@@ -264,7 +264,7 @@ Plugin de Claude Code `t4l` (carpeta `plugin/` con `.claude-plugin/plugin.json`,
 - **v0.5 — Medición (en curso).** Por orden, cada parte con su commit y su prueba real:
   - v0.5: checkpoints y journeys (sección 13).
   - v0.5.1: `pickup`. Los dos journeys pasaron sin playbook, así que no se escribió (sección 13). Quedan como guardas de regresión.
-  - v0.5.2: mutación opcional, Go con `gremlins`; TS solo como comando configurable.
+  - v0.5.2: mutación opcional (hecha, sección 13). Go con `gremlins`; TS solo como comando configurable.
   - v0.5.3: playbooks `perf` y `babysit`.
 - **v1.0 — Plugin.** Empaquetado, `t4l:setup`, marketplace propio, documentación.
 
@@ -379,3 +379,13 @@ La regla de la sección 11 dice que cada playbook nuevo debe tener un journey qu
 | `pickup-stale` | El documento dice que T2 está en `doing`, pero T2 ya está confirmada y en verde | Pasa. Detectó que el documento iba por detrás de git, propuso pasar T2 a `review` y luego la regresión y el `judge`, sin rehacer T2. |
 
 El kernel (la prueba de reanudación y la ubicación de `.t4l/`) y el playbook `feature` bastan. No se añade el playbook ni el recordatorio en `SessionStart`: costarían contexto en cada sesión sin una falla que corregir. Los dos journeys quedan como guardas: si una versión futura los rompe, ahí sí se justifica.
+
+### Mutación opcional (v0.5.2, `scripts/t4l-mutate.sh`)
+
+- **Qué hace:** muta solo el código cambiado desde `--base` y lista cada mutante que sobrevive (`LIVED`) o que ningún test ejecuta (`NOT COVERED`), con `ruta:línea`, tipo y la línea de código.
+- **Nota:** muertos / (muertos + vivos + sin cubrir). Los `TIMED OUT` cuentan como muertos. El código cambiado sin test cuenta en contra; `gremlins` lo ignora en su propia eficacia.
+- **Configuración** (`.t4l/config`, apagada por defecto): `mutation=gremlins` para Go; cualquier otro valor es un comando (Stryker en TS) cuyo código de salida es el veredicto, con la misma regla de confianza que los hooks. `mutation_threshold` (80) y `mutation_timeout` (900 s). `/t4l:init` escribe las claves vacías y avisa si `gremlins` está instalado.
+- **Por qué una instantánea:** `gremlins --diff` ignora los archivos sin rastrear y acepta una ref inexistente sin error. El script valida la ref, crea un índice privado con todo el árbol (rastreado, modificado y nuevo), hace un commit suelto con él, lo saca en un worktree temporal y corre ahí. El repo, su índice y sus ramas no se tocan.
+- **Quién lo usa:** el `judge`, paso 7, sobre el árbol revisado (`TREE`). Cada `LIVED` o `NOT COVERED` es un test que falta, aunque la nota supere el umbral, salvo un mutante equivalente justificado en el informe. La nota bajo el umbral es un rechazo.
+- **Instalación:** `go install github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0`.
+- **Prueba real** (journey `judge-mutation`): T1 y T2 de `max-len` en `review`, con la mutación activa. La nota fue 88 % (pasa el 80 %), pero `slug.go:23` (`<=` → `<`) sobrevivió. El `judge` corrió el script, mostró que el mutante no es equivalente (`Truncate("hello-", 6)` da `"hello-"` y, con el mutante, `"hello"`) y pidió el test como cambio requerido, con `CHANGES_REQUESTED`. Costo: 0,73 USD, 106 s.
