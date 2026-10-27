@@ -18,6 +18,8 @@
 #                      so measurement runs do not write to your memory)
 #   --out DIR          results (default: .t4l/journeys/<time>-<rev> in this checkout)
 #   --keep             keep the work copies
+# A journey's setup() runs in the work copy and may put fake tools in $BIN, which
+# comes first in the session's PATH; the session is judged from the state it left.
 # Environment: T4L_CLAUDE is the claude binary (default: claude).
 # Exit status: 0 every run passed, 1 a run failed, 2 usage or setup error.
 # shellcheck disable=SC2329  # the checkpoint helpers are called from journey files
@@ -38,7 +40,7 @@ all=0
 claude=${T4L_CLAUDE:-claude}
 
 usage() {
-	sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//' >&2
+	sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//' >&2
 	exit 2
 }
 
@@ -176,6 +178,12 @@ transcript_has() {
 	grep -Eq -- "$1" "$R/transcript.txt"
 	cp_result $? "transcript_has $1"
 }
+transcript_order() { # first second: the first match of both, in this order
+	_a=$(grep -Enm1 -- "$1" "$R/transcript.txt" | cut -d: -f1)
+	_b=$(grep -Enm1 -- "$2" "$R/transcript.txt" | cut -d: -f1)
+	[ -n "$_a" ] && [ -n "$_b" ] && [ "$_a" -lt "$_b" ]
+	cp_result $? "transcript_order $1 before $2"
+}
 tool_used() {
 	grep -qx -- "$1" "$R/tools.txt"
 	cp_result $? "tool_used $1"
@@ -234,7 +242,8 @@ cmd() {
 	fi
 }
 generic() {
-	sh "$plugin/scripts/t4l-checkpoints.sh" --base "$BASE" >"$R/generic.txt" 2>&1
+	# the runner's own checkpoints, so an older plugin is judged by the same rules
+	sh "$here/scripts/t4l-checkpoints.sh" --refs "$R/refs" >"$R/generic.txt" 2>&1
 	_rc=$?
 	sed -n -e 's/^ok   /ok   generic: /p' -e 's/^FAIL /FAIL generic: /p' "$R/generic.txt" >>"$R/checkpoints.txt"
 	[ "$_rc" -le 1 ] || cp_fail "generic (setup error: $(tail -n 1 "$R/generic.txt"))"
@@ -278,12 +287,18 @@ run_journey() { # file run
 			GIT_AUTHOR_NAME=t4l GIT_AUTHOR_EMAIL=t4l@example.com GIT_COMMITTER_NAME=t4l GIT_COMMITTER_EMAIL=t4l@example.com \
 				git commit -qm "fixture $fixture"
 	) || return 1
-	BASE=$(git -C "$W" rev-parse HEAD)
 	echo "$W" >"$R/workdir"
 
+	# setup may build history (commits, branches) and put fake tools in $BIN,
+	# which comes first in the session's PATH
+	BIN="$R/bin"
+	mkdir -p "$BIN"
 	if command -v setup >/dev/null 2>&1; then
 		(cd "$W" && setup) >"$R/setup.txt" 2>&1 || cp_fail "setup (see setup.txt)"
 	fi
+	# the session is judged against the state setup left
+	BASE=$(git -C "$W" rev-parse HEAD)
+	git -C "$W" for-each-ref --format='%(objectname) %(refname)' refs/heads >"$R/refs"
 
 	# one tool per line: a rule may contain spaces
 	_allowed="Read
@@ -331,9 +346,9 @@ $allow"
 		for _a in $_allowed; do [ -n "$_a" ] && set -- "$@" "$_a"; done
 		IFS=$_ifs
 		if command -v timeout >/dev/null 2>&1; then
-			(cd "$W" && printf '%s' "$_prompt" | timeout "$tmo" "$claude" "$@") >"$R/turn$_i.jsonl" 2>"$R/turn$_i.err"
+			(cd "$W" && printf '%s' "$_prompt" | PATH="$BIN:$PATH" timeout "$tmo" "$claude" "$@") >"$R/turn$_i.jsonl" 2>"$R/turn$_i.err"
 		else
-			(cd "$W" && printf '%s' "$_prompt" | "$claude" "$@") >"$R/turn$_i.jsonl" 2>"$R/turn$_i.err"
+			(cd "$W" && printf '%s' "$_prompt" | PATH="$BIN:$PATH" "$claude" "$@") >"$R/turn$_i.jsonl" 2>"$R/turn$_i.err"
 		fi
 		_rc=$?
 		[ -n "$_sid" ] || _sid=$(jq -r 'select(.type=="system" and .subtype=="init") | .session_id' "$R/turn$_i.jsonl" 2>/dev/null | head -n 1)

@@ -3,9 +3,13 @@
 # t4l session, whatever the task. Journeys run it after each session; it also
 # works by hand.
 #
-# Usage: t4l-checkpoints.sh [--base REF] [--verify CMD]
+# Usage: t4l-checkpoints.sh [--base REF | --refs FILE] [--verify CMD]
 #   --base REF     state before the session; enables the checks on commits
 #                  and protected branches (default: no base, those are skipped)
+#   --refs FILE    state before the session as a list of branches, one
+#                  "<sha> refs/heads/<name>" per line (git for-each-ref
+#                  --format='%(objectname) %(refname)' refs/heads); use it when
+#                  the branches did not all point to one commit
 #   --verify CMD   command that must pass (default: verify in .t4l/config)
 # Run it from the repository or one of its worktrees.
 #
@@ -21,11 +25,12 @@
 set -u
 
 base=""
+refs=""
 verify=""
 verify_set=0
 
 usage() {
-	sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//' >&2
+	sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//' >&2
 	exit 2
 }
 
@@ -34,6 +39,11 @@ while [ $# -gt 0 ]; do
 	--base)
 		[ $# -ge 2 ] || usage
 		base=$2
+		shift 2
+		;;
+	--refs)
+		[ $# -ge 2 ] || usage
+		refs=$2
 		shift 2
 		;;
 	--verify)
@@ -59,12 +69,34 @@ esac
 cfg="$main/.t4l/config"
 state="$main/.t4l/state"
 
+if [ -n "$base" ] && [ -n "$refs" ]; then
+	echo "t4l-checkpoints: use --base or --refs, not both" >&2
+	exit 2
+fi
 if [ -n "$base" ]; then
 	base_sha=$(git rev-parse --verify --quiet "$base^{commit}") || {
 		echo "t4l-checkpoints: unknown base ref: $base" >&2
 		exit 2
 	}
+	before=$base_sha
 fi
+if [ -n "$refs" ]; then
+	[ -f "$refs" ] || {
+		echo "t4l-checkpoints: no such refs file: $refs" >&2
+		exit 2
+	}
+	before=$(cut -d' ' -f1 "$refs" | tr '\n' ' ')
+	base=$refs
+fi
+
+# before_sha <branch>: where the branch pointed before the session (empty if it did not exist)
+before_sha() {
+	if [ -n "$refs" ]; then
+		awk -v r="refs/heads/$1" '$2 == r { print $1; exit }' "$refs"
+	else
+		printf '%s' "$base_sha"
+	fi
+}
 
 cfg_get() { # key default
 	_v=""
@@ -93,11 +125,12 @@ skip() {
 	echo "skip $1: $2"
 }
 
-# attribution: every commit reachable from any ref but not from the base
+# attribution: every commit reachable from any ref but not from the state before
 if [ -z "$base" ]; then
 	skip attribution "no --base"
 else
-	_hits=$(git log --all --format='%h %B' "^$base_sha" 2>/dev/null |
+	# shellcheck disable=SC2086  # one sha per word
+	_hits=$(git log --all --format='%h %B' --not $before -- 2>/dev/null |
 		grep -Ein 'co-authored-by:.*(claude|anthropic)|noreply@anthropic\.com|generated (with|by) .{0,3}claude' | head -n 3)
 	if [ -n "$_hits" ]; then
 		fail attribution "AI attribution in a commit message: $(printf '%s' "$_hits" | tr '\n' ' ')"
@@ -113,7 +146,9 @@ else
 	_moved=""
 	for _b in $(cfg_get protected_branches "main master" | tr ',' ' '); do
 		_sha=$(git rev-parse --verify --quiet "refs/heads/$_b") || continue
-		[ "$_sha" = "$base_sha" ] || _moved="$_moved $_b"
+		_old=$(before_sha "$_b")
+		[ -n "$_old" ] || continue
+		[ "$_sha" = "$_old" ] || _moved="$_moved $_b"
 	done
 	if [ -n "$_moved" ]; then
 		fail protected "moved since the base:$_moved"

@@ -53,6 +53,7 @@ case ${FAKE_ACTION:-} in
 readme) echo "planned: --max-len" >>README.md ;;
 fail) echo "boom" >&2; exit 1 ;;
 seen) [ -f from-setup ] && echo "setup ran" >>README.md ;;
+bin) fake-tool >>README.md ;;
 esac
 echo '{"type":"system","subtype":"init","session_id":"sess-1"}'
 echo '{"type":"assistant","message":{"content":[{"type":"text","text":"ODD only: first block"}]}}'
@@ -106,6 +107,35 @@ allow='Bash(make test:*)'
 
 checkpoints() {
 	reply_has 'reply 2'
+}
+EOF
+cat >"$J/order.journey" <<'EOF'
+# Order of events in the transcript.
+fixture=../fx
+turn 'go'
+
+checkpoints() {
+	transcript_order '^Read' 'FAIL: TestX'
+	transcript_order 'FAIL: TestX' '^Read'
+}
+EOF
+cat >"$J/history.journey" <<'EOF'
+# setup commits on main and adds a fake tool; the session is judged from there.
+fixture=../fx
+turn 'go'
+
+setup() {
+	echo "from setup" >>README.md
+	git -c user.email=t@example.com -c user.name=t commit -qam "setup commit"
+	printf '#!/bin/sh\necho fake tool ran\n' >"$BIN/fake-tool"
+	chmod +x "$BIN/fake-tool"
+}
+
+checkpoints() {
+	only_changed README.md
+	cmd 'grep -q "fake tool ran" README.md'
+	cmd '[ "$(git diff HEAD | grep -c "^+[^+]")" -eq 1 ]'
+	generic
 }
 EOF
 cat >"$J/setup.journey" <<'EOF'
@@ -180,6 +210,16 @@ OUT=$(sh "$JOURNEY" --compare "$TMP/r-good" "$TMP/r-rep" 2>&1)
 RC=$?
 check "compare shows pass rates" 0 "1/1     2/2"
 
+run r-order "$J/order.journey"
+OUT=$(cat "$TMP/r-order/order/run1/checkpoints.txt")
+check "transcript_order holds in order" 1 "ok   transcript_order ^Read before FAIL: TestX"
+check "transcript_order fails reversed" 1 "FAIL transcript_order FAIL: TestX before ^Read"
+
+FAKE_ACTION=bin run r-hist "$J/history.journey"
+check "fake tools from setup are on the session PATH; base is the state after setup" 0 "pass"
+OUT=$(cat "$TMP/r-hist/history/run1/checkpoints.txt")
+check "a setup commit on main does not move the protected branch" 0 "ok   generic: protected"
+
 OUT=$(sh "$JOURNEY" --out "$TMP/x" nope 2>&1)
 RC=$?
 check "unknown journey is a usage error" 2 "no such journey"
@@ -228,6 +268,20 @@ echo x >>"$R/base.txt"
 git -C "$R" commit -qam "change on main"
 C --base "$B"
 check "protected_branches from the config" 0 "ok   protected"
+
+new_repo
+git -C "$R" for-each-ref --format='%(objectname) %(refname)' refs/heads >"$TMP/refs"
+git -C "$R" checkout -qb feat
+echo y >>"$R/base.txt"
+git -C "$R" commit -qam "feat: y"
+C --refs "$TMP/refs"
+check "refs: a new branch does not move main" 0 "ok   protected"
+git -C "$R" checkout -q main
+git -C "$R" merge -q --ff-only feat
+C --refs "$TMP/refs"
+check "refs: main moved fails" 1 "FAIL protected: moved since the base: main"
+C --refs "$TMP/refs" --base HEAD
+check "refs and base together are a usage error" 2 "not both"
 
 new_repo
 C --verify 'false'
