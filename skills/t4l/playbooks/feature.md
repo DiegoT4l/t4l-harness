@@ -33,7 +33,7 @@ For new or changed behavior that fails the resume test. The lead owns the design
    - A task that depends on another can start as soon as that one is in `review`; you do not need a judge between them. If the judge later rejects the first task, reopen it and every task that depends on it.
 7. **Review.** When every task is in `review`:
    - If the risk is high (auth, money, data loss, concurrency, public API) or the diff is above ~400 lines, launch the `t4l:reviewer` once per relevant lens, one lens per launch (`LENS`, `BASE`, `DOC`).
-   - Launch the `t4l:judge` with `DOC`, `T4L_ROOT` and `BASE` (the ref of the previous code).
+   - Launch the `t4l:judge` with `DOC`, `T4L_ROOT` and `BASE` (the ref of the previous code). When `.t4l/config` enables `mutation`, the judge also mutation-tests the changed code (`t4l-mutate.sh`) and treats surviving mutants as missing tests.
 8. **Act on the verdict.**
    - `CHANGES_REQUESTED`: for each affected task run `$TASK reopen <ID> "<reason>"`, relaunch the implementer with the required changes, then the judge again. After two rounds without approval, stop and ask the user.
    - `APPROVED`: run `$TASK done <ID> [sha]` for each task, then `$TASK check` and `$TASK close`.
