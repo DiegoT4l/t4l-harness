@@ -1,0 +1,12 @@
+# Docs change: ODD only, inline, nothing but the README touched.
+fixture=slug
+turn 'update the README to mention the --max-len flag is planned'
+
+checkpoints() {
+	reply_has 'ODD only'
+	changed README.md
+	only_changed README.md
+	tool_unused Agent
+	absent .t4l/tasks
+	generic
+}

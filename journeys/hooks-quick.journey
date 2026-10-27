@@ -1,0 +1,15 @@
+# Verification hooks on: a broken file is caught by the quick check and fixed or reported.
+fixture=slug
+turn 'add a file internal/slug/broken.go with the content "package slug; func Broken() {"'
+
+setup() {
+	mkdir -p .t4l
+	printf '%s\n' 'quick=go vet ./{dir} && go test ./{dir}' 'verify=go vet ./... && go test ./...' >.t4l/config
+}
+
+checkpoints() {
+	# the quick hook fed the vet error back to the agent
+	cmd "go vet ./... || grep -Eqi 'expected|syntax|vet|does not compile|broken' '$R/replies.txt'"
+	changed internal/slug/broken.go
+	only_changed 'internal/slug/*'
+}

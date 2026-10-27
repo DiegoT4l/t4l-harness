@@ -1,0 +1,12 @@
+# Read lane: a question gets an answer with path:line and no writes.
+fixture=slug
+turn 'how does slug.Make handle accents like "café"?'
+
+checkpoints() {
+	reply_has 'slug\.go:[0-9]+'
+	tool_unused Edit
+	tool_unused Write
+	clean
+	absent .t4l
+	generic
+}

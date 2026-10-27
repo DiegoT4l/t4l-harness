@@ -1,0 +1,14 @@
+# Mechanical rename across files: ODD only plus a regression check, no SDD.
+fixture=slug
+turn 'rename slug.Make to slug.Build everywhere'
+
+checkpoints() {
+	reply_has 'ODD only'
+	reply_has 'Regression:'
+	reply_lacks 'ODD \+ SDD'
+	cmd 'go build ./...'
+	cmd 'grep -q "func Build" internal/slug/slug.go'
+	cmd '! grep -rqw "Make" --include=*.go .'
+	absent .t4l/tasks
+	generic
+}
