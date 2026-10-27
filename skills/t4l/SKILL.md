@@ -63,10 +63,11 @@ Rules:
 | New or changed behavior that fails the resume test | `playbooks/feature.md` | ODD + SDD or ODD + TDD |
 | Two or more independent tasks of a large-lane feature | `playbooks/parallel.md` | per feature mode |
 | Behavior-preserving change of structure | `playbooks/refactor.md` | ODD only if mechanical (rename, extract, inline); ODD + TDD with characterization tests if it reshapes logic |
+| Make something faster or lighter (time, memory, allocations) | `playbooks/perf.md` | ODD only |
 | Commit, branch or open a PR | `playbooks/ship.md` | ODD only |
 | Anything else | no playbook yet: apply the kernel and the mode procedure above | per section 4 |
 
-Related skills: `/t4l:init` enables the verification hooks in a repo; `/t4l:correct` turns repeated corrections into enforced structure. Playbooks for perf, babysit and pickup are planned (see `docs/design.md`).
+Related skills: `/t4l:init` enables the verification hooks in a repo; `/t4l:correct` turns repeated corrections into enforced structure.
 
 ## 6. Large lane
 
