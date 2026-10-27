@@ -1,62 +1,110 @@
 # t4l-harness
 
-Harness propio para Claude Code, construido a partir de lo mejor de tres harnesses de referencia:
+A Claude Code plugin that adapts the engineering process to each task. ODD is the backbone: small work stays small. TDD and SDD are modes the router turns on when the task calls for them. Rules that a hook or a script can check are checked by one, not left as prose.
 
-| Referencia | Qué nos interesa |
+It takes ideas, not code, from three reference harnesses:
+
+| Reference | What it contributes |
 |---|---|
-| [pstack](https://github.com/cursor/plugins/tree/main/harness/pstack) | Playbooks por tipo de tarea, principios de ingeniería, calidad sobre volumen, verificación independiente |
-| [gentle-ai](https://github.com/Gentleman-Programming/gentle-ai) | Memoria persistente (Engram), ODD (trabajo pequeño se mantiene pequeño), evidencia, bench |
-| [harness-sdd (uncle-bob-harness)](https://github.com/betta-tech/harness-sdd/tree/uncle-bob-harness) | Pipeline spec → Gherkin → TDD → judge → mutación, puerta humana, estado en disco |
+| [pstack](https://github.com/cursor/plugins/tree/main/harness/pstack) | Playbooks per task type, engineering principles, quality over volume, independent verification |
+| [gentle-ai](https://github.com/Gentleman-Programming/gentle-ai) | Persistent memory (Engram), ODD, evidence, benchmarking |
+| [harness-sdd (uncle-bob-harness)](https://github.com/betta-tech/harness-sdd/tree/uncle-bob-harness) | Spec → Gherkin → TDD → judge → mutation pipeline, human gate, state on disk |
 
-Ninguno convence por completo. Este repo decide, pieza por pieza, qué se adopta, qué se adapta y qué se descarta. El análisis está en [`docs/references.md`](docs/references.md) y las decisiones abiertas en [`docs/design.md`](docs/design.md).
+None of them fits as is. This repository decides, piece by piece, what to adopt, adapt or drop. The analysis is in [`docs/references.md`](docs/references.md) and the design in [`docs/design.md`](docs/design.md). Both documents are in Spanish.
 
-## Estructura
+## How it works
+
+- **Router (`/t4l`).** It first checks whether the request authorizes a change. Then it explores proportionately and puts the task in a lane: **read-only**, **small** (inline, no task document) or **large** (feature document, contract, gates). It also picks the mode: **ODD only**, **ODD + TDD** or **ODD + SDD**, and declares it in one line.
+- **Playbooks.** `investigate`, `bug`, `feature`, `refactor`, `perf`, `ship` and `parallel`.
+- **Agents.** All of them start with fresh context:
+  - `implementer`: one task, test-first.
+  - `judge`: read-only; approves or requests changes.
+  - `reviewer`: one lens per launch.
+  - `workflow-master`: Kanban board, parallel implementers in isolated worktrees.
+- **Enforcement.**
+  - `guard` blocks writes before spec approval and outside a task's scope.
+  - Opt-in verification hooks: a quick check after each edit and the full verify before a turn ends.
+  - A branch guard and a slice-size warning.
+- **Measurement.** Journeys replay real headless sessions on a throwaway fixture and judge them with deterministic checkpoints. Use them to compare harness versions. A new playbook has to earn its place with a journey that fails without it.
+
+## Layout
 
 ```
-.claude-plugin/  manifest del plugin
-rules/           kernel que se inyecta en cada sesión (t4l.md)
+.claude-plugin/  plugin manifest
+rules/           kernel injected into every session (t4l.md)
 skills/          t4l (router + playbooks), init, correct
 agents/          implementer, judge, reviewer, workflow-master
-hooks/           hooks.json + scripts POSIX sh (guard, verificación, ramas, tamaño, kernel)
-scripts/         t4l-init, t4l-task, t4l-regress, t4l-size, t4l-integrate, t4l-search, t4l-ingest,
-                 t4l-checkpoints, t4l-journey, t4l-mutate
-journeys/        sesiones reproducibles para medir el harness: fixture (fixtures/slug) y estados (states/)
+hooks/           hooks.json + POSIX sh hooks (guard, verification, branches, size, kernel)
+scripts/         t4l-init, t4l-task, t4l-regress, t4l-size, t4l-integrate, t4l-search,
+                 t4l-ingest, t4l-checkpoints, t4l-journey, t4l-mutate
+journeys/        reproducible sessions that measure the harness, with the slug fixture and shared states
 tests/           hooks, regress, task, size, integrate, integrations, journey, mutate
-docs/            referencias, diseño, cómo probar
+docs/            references, design, manual test scenarios (Spanish)
 ```
 
-## Estado
-
-**v0.4.** Kernel, router `t4l` con selector de método (ODD / TDD / SDD), playbooks `investigate`, `bug`, `feature`, `refactor`, `ship` y `parallel`, hooks de verificación opt-in (`/t4l:init`), `/t4l:correct`, chequeo de regresión (`t4l-regress.sh` con `{edge}`), carril grande completo (documento de feature con `t4l-task.sh`, `guard`, agentes `implementer`, `judge` y `reviewer`) y el **`workflow-master`**: tablero Kanban con límite WIP, modo paralelo en worktrees aislados, alcance por tarea hecho cumplir por el `guard`, medición de tamaño por rebanada (`t4l-size.sh`) e integración en una rama aparte (`t4l-integrate.sh`). **v0.4.1:** integraciones opcionales con cocoindex-code (búsqueda semántica, `t4l-search.sh`) y markitdown (documentos a Markdown, `t4l-ingest.sh`). **v0.5:** medición: checkpoints genéricos del estado final (`t4l-checkpoints.sh`) y journeys headless que comparan versiones del harness (`t4l-journey.sh`). **v0.5.2:** mutación opcional del código cambiado (`t4l-mutate.sh`, Go con `gremlins`), que el `judge` interpreta. **v0.5.3:** playbook `perf`; `pickup` y `babysit` no se ganaron el suyo (sus journeys pasan sin él). Ver `docs/design.md`.
-
-## Probar
+## Use it
 
 ```bash
-cd ~/t4l-sandbox && claude --plugin-dir ~/t4l-harness
+claude --plugin-dir ~/t4l-harness
 ```
 
-Escenarios y qué observar en [`docs/testing.md`](docs/testing.md). Tests de los scripts: `for t in hooks regress task size integrate integrations journey mutate; do sh tests/$t.sh; done`.
+The `SessionStart` hook injects the kernel, so nothing needs to be copied into `~/.claude`. In each repository:
 
-Medir una versión del harness (gasta tokens; cada journey corre en una copia desechable):
+- `/t4l:init` enables the verification hooks by writing `.t4l/config`. It detects Go and TypeScript.
+- `/t4l:correct` turns a repeated correction into an enforced rule.
+
+Per-repository state lives in `.t4l/`, which is git-ignored.
+
+## Status
+
+| Version | What it added |
+|---|---|
+| v0.1 | Kernel, router, method selector (ODD / TDD / SDD), `investigate` and `bug` playbooks |
+| v0.2 | Opt-in verification hooks (`/t4l:init`), `/t4l:correct`, rule ↔ enforcer table |
+| v0.3 | Large lane: feature document (`t4l-task.sh`), `guard`, `implementer`, `judge` and `reviewer` agents, `feature`, `refactor` and `ship` playbooks, regression check (`t4l-regress.sh` with `{edge}`) |
+| v0.4 | `workflow-master`: Kanban board with a WIP limit, parallel mode in isolated worktrees, per-task scope enforced by `guard`, slice size (`t4l-size.sh`), integration on a separate branch (`t4l-integrate.sh`) |
+| v0.4.1 | Optional semantic code search (cocoindex-code, `t4l-search.sh`) and document ingestion (markitdown, `t4l-ingest.sh`) |
+| v0.5 | Measurement: generic final-state checkpoints (`t4l-checkpoints.sh`) and headless journeys (`t4l-journey.sh`) |
+| v0.5.1 | `pickup` journeys. No playbook: both pass without one |
+| v0.5.2 | Optional mutation testing of changed code (`t4l-mutate.sh`, Go with gremlins); the `judge` treats surviving mutants as missing tests |
+| v0.5.3 | `perf` playbook (journey pass rate 0/3 without it, 2/3 with it). `babysit` journey, no playbook: it passes without one |
+
+Next: v1.0, packaging (`t4l:setup`, a marketplace in this repository, documentation).
+
+## Test and measure
+
+Script tests (no tokens spent):
+
+```bash
+for t in hooks regress task size integrate integrations journey mutate; do sh tests/$t.sh; done
+```
+
+Journeys run real sessions and spend tokens: about 6 USD and 10 minutes for all twelve with the default model. Each one runs in a throwaway copy of `journeys/fixtures/slug`, with Engram disabled so that measurement runs do not write to your memory.
 
 ```bash
 sh scripts/t4l-journey.sh --list
-sh scripts/t4l-journey.sh --all                       # resultados en .t4l/journeys/<fecha>-<rev>
+sh scripts/t4l-journey.sh --all                        # results in .t4l/journeys/<date>-<rev>
+sh scripts/t4l-journey.sh --repeat 3 perf              # pass rate over several runs
+sh scripts/t4l-journey.sh --plugin-dir ../old-version --out .t4l/journeys/A perf
 sh scripts/t4l-journey.sh --compare .t4l/journeys/A .t4l/journeys/B
 ```
 
-## Restricciones heredadas del entorno
+The manual scenarios and what to look for are in [`docs/testing.md`](docs/testing.md).
 
-- Sin rastro de IA en commits, PRs ni código (hook `block-ai-attribution` ya activo en `~/.claude`).
-- Sin Homebrew; instalación vía pacman/paru o binarios upstream.
-- Debe convivir con `engram` y `pi-workers`, sin duplicarlos.
+## Optional integrations
 
-## Integraciones opcionales
+t4l works without them. The `SessionStart` hook announces the ones that are installed.
 
 ```bash
-uv tool install 'cocoindex-code[full]'   # búsqueda semántica de código (ccc)
-uv tool install 'markitdown[all]'        # documentos a Markdown
-go install github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0   # mutación en Go
+uv tool install 'cocoindex-code[full]'                          # semantic code search (ccc)
+uv tool install 'markitdown[all]'                               # documents to Markdown
+go install github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0  # mutation testing for Go
 ```
 
-En cada repo, `sh scripts/t4l-search.sh --init` activa la búsqueda; el índice es local.
+To enable search in a repository, run `sh scripts/t4l-search.sh --init`; the index stays local. To enable mutation testing, set `mutation=gremlins` in `.t4l/config`.
+
+## Environment constraints
+
+- No AI attribution in commits, PRs or code. The `block-ai-attribution` hook in `~/.claude` enforces it.
+- No Homebrew: install with pacman or paru, or use upstream binaries.
+- It must coexist with `engram` and `pi-workers` without duplicating them.
