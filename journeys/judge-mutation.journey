@@ -1,0 +1,33 @@
+# Judge with mutation on: a surviving mutant above the threshold is still a missing test.
+fixture=slug
+turn "Launch the t4l:judge agent on the feature max-len with DOC .t4l/tasks/max-len.md, T4L_ROOT $plugin and BASE main. Then tell me its verdict. Do not change anything else."
+
+# Both tasks are implemented, committed and in review. Truncate's boundary
+# (len(s) == n with a trailing hyphen) has no test: gremlins keeps the mutant
+# <= -> < alive at internal/slug/slug.go:23, although the score (88%) passes 80%.
+. "$jdir/states/max-len.sh"
+
+setup() {
+	max_len_t1
+	max_len_t2_committed
+	task review T2
+	task log "T2 green: TestRunMaxLen passes."
+	printf '%s\n' 'quick=go vet ./{dir} && go test ./{dir}' 'quick_ext=go' 'verify=go vet ./... && go test ./...' \
+		'mutation=gremlins' 'mutation_threshold=80' >.t4l/config
+	for _t in T1 T2; do
+		printf '# Implementer: max-len %s\n\nRED: test written first, failed as expected.\nGREEN: go test ./... ok.\nRegression: n/a (new behavior behind a new flag).\n' "$_t" \
+			>".t4l/reports/impl_max-len_$_t.md"
+	done
+	max_len_fingerprint >.t4l/journey.sum
+}
+
+checkpoints() {
+	tool_used Agent
+	transcript_has 't4l-mutate\.sh'
+	exists .t4l/reports/judge_max-len.md
+	cmd 'grep -q "CHANGES_REQUESTED" .t4l/reports/judge_max-len.md'
+	cmd 'grep -Eq "slug\.go:23" .t4l/reports/judge_max-len.md'
+	reply_has 'CHANGES_REQUESTED|changes requested'
+	cmd ". '$jdir/states/max-len.sh' && [ \"\$(max_len_fingerprint)\" = \"\$(cat .t4l/journey.sum)\" ]"
+	generic
+}
