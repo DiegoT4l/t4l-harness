@@ -45,8 +45,8 @@ fi
 
 cwd=$(t4l_json '.cwd' cwd)
 [ -n "$cwd" ] || cwd=$PWD
-root=$(t4l_repo_root "$cwd") || exit 0
-t4l_load_config "$root" || exit 0
+main=$(t4l_main_root "$cwd") || exit 0
+t4l_load_config "$main" || exit 0
 [ -n "$CFG_PROTECTED" ] || exit 0
 
 branch=$(git -C "$cwd" symbolic-ref --quiet --short HEAD 2>/dev/null) || exit 0

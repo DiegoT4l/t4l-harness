@@ -9,10 +9,14 @@ set -eu
 force=0
 [ "${1:-}" = "--force" ] && force=1
 
-root=$(git rev-parse --show-toplevel 2>/dev/null) || {
+gc=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || {
 	echo "t4l-init: not inside a git repository" >&2
 	exit 1
 }
+case $gc in
+*/.git) root=$(dirname "$gc") ;;
+*) root=$(git rev-parse --show-toplevel) ;;
+esac
 cfg="$root/.t4l/config"
 
 if [ -f "$cfg" ] && [ "$force" -ne 1 ]; then

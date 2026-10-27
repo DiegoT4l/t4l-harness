@@ -13,14 +13,15 @@ t4l_stop_hook_active && exit 0
 
 cwd=$(t4l_json '.cwd' cwd)
 [ -n "$cwd" ] || cwd=$PWD
-root=$(t4l_repo_root "$cwd") || exit 0
-t4l_load_config "$root" || exit 0
+main=$(t4l_main_root "$cwd") || exit 0
+work=$(t4l_repo_root "$cwd") || exit 0
+t4l_load_config "$main" || exit 0
 [ -n "$CFG_VERIFY" ] || exit 0
 
-# Changes under .t4l/ (the config itself, reports) do not count as work to verify.
-[ -n "$(git -C "$root" status --porcelain -- . ':!.t4l' 2>/dev/null)" ] || exit 0
+# Changes under .t4l/ (the config itself, reports) and .claude/worktrees/ do not count as work to verify.
+[ -n "$(git -C "$work" status --porcelain -- . ':!.t4l' ':!.claude/worktrees' 2>/dev/null)" ] || exit 0
 
-out=$(t4l_run "$root" "$CFG_VERIFY_TIMEOUT" "$CFG_VERIFY")
+out=$(t4l_run "$work" "$CFG_VERIFY_TIMEOUT" "$CFG_VERIFY")
 rc=$?
 [ "$rc" -eq 0 ] && exit 0
 

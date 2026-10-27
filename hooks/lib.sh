@@ -32,9 +32,26 @@ t4l_stop_hook_active() {
 		grep -q '"stop_hook_active"[[:space:]]*:[[:space:]]*true'
 }
 
-# t4l_repo_root <dir>: prints the git toplevel or fails.
+# t4l_repo_root <dir>: prints the git toplevel (the worktree root inside a linked worktree).
 t4l_repo_root() {
 	git -C "$1" rev-parse --show-toplevel 2>/dev/null
+}
+
+# t4l_main_root <dir>: root of the main checkout, even from inside a linked
+# worktree. State and config (.t4l/) always live there.
+t4l_main_root() {
+	_c=$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
+	case $_c in
+	*/.git) dirname "$_c" ;;
+	*) git -C "$1" rev-parse --show-toplevel 2>/dev/null ;;
+	esac
+}
+
+# t4l_existing_dir <path>: the nearest ancestor that exists.
+t4l_existing_dir() {
+	_d=$1
+	while [ ! -d "$_d" ] && [ "$_d" != "/" ]; do _d=$(dirname "$_d"); done
+	printf '%s' "$_d"
 }
 
 # t4l_load_config <root>: returns 1 when hooks must stay inactive for this repo.
