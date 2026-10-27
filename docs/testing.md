@@ -116,7 +116,7 @@ Prueba real: un clon del sandbox con la feature `par` ya planificada (modo `tdd`
 
 ## Journeys (v0.5)
 
-Medición automática: `sh scripts/t4l-journey.sh --all` corre los journeys de `journeys/` en copias desechables del fixture `slug` y evalúa sus checkpoints. Gasta tokens: unos 3 USD y 4 minutos los siete, con el modelo por defecto. Para comparar dos versiones: `--plugin-dir` hacia un worktree de la otra versión y `--compare A B`. El runner se prueba sin tokens con `sh tests/journey.sh`, que usa un `claude` falso.
+Medición automática: `sh scripts/t4l-journey.sh --all` corre los journeys de `journeys/` en copias desechables del fixture `slug` y evalúa sus checkpoints. Gasta tokens: unos 3,80 USD y 5 minutos los nueve, con el modelo por defecto. Para comparar dos versiones: `--plugin-dir` hacia un worktree de la otra versión y `--compare A B`. El runner se prueba sin tokens con `sh tests/journey.sh`, que usa un `claude` falso.
 
 | Journey | Escenario | Checkpoints principales |
 |---|---|---|
@@ -127,6 +127,8 @@ Medición automática: `sh scripts/t4l-journey.sh --all` corre los journeys de `
 | `rename-regress` | 7 | `ODD only` sin SDD, `go build`, no queda `Make`, `Regression:` |
 | `large-gate` | 13 | documento de feature, `gate=pending`, `Existing behavior at risk`, árbol limpio |
 | `hooks-quick` | 9 | con `.t4l/config`, el archivo roto se corrige o se informa |
+| `pickup` | — | feature a medias (RED sin confirmar, README fuera de alcance): informa estado, RED y deriva sin cambiar nada |
+| `pickup-stale` | — | documento atrasado respecto a git: propone `review` y `judge`, no rehace T2 |
 
 ### Primeras ejecuciones reales (v0.5)
 

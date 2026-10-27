@@ -1,0 +1,89 @@
+# Resume a large-lane feature cut mid-task: state from the document, reconciled with the tree.
+fixture=slug
+turn 'we got interrupted yesterday. where did we leave off? do not change anything yet: tell me the state and the next step.'
+
+# The feature max-len is half done: T1 (slug.Truncate) is done and committed;
+# T2 (the CLI flag) is doing, with its RED test written and not committed.
+# README.md was also edited, outside the Files of any task: drift to report.
+setup() {
+	task() { sh "$plugin/scripts/t4l-task.sh" "$@"; }
+	git config user.email t4l@example.com
+	git config user.name t4l
+	git switch -qc feat/max-len
+	task new max-len --mode tdd --request 'Add a --max-len N flag to the slug command: cut the slug to at most N characters, without a trailing hyphen.'
+	_doc=.t4l/tasks/max-len.md
+	sed -i 's/^S1\. <behavior>.*/S1. slug.Truncate(s, n) cuts a slug to at most n characters and drops a trailing hyphen./' "$_doc"
+	sed -i 's/^    Acceptance: <observable criterion>/    Acceptance: Truncate("hello-world", 6) == "hello"/' "$_doc"
+	sed -i 's/^    Check: <command that proves it>/    Check: go test .\/internal\/slug/' "$_doc"
+	sed -i 's/^    Existing behavior at risk: <.*/    Existing behavior at risk: none, new function.\
+\
+S2. `slug --max-len N <text>` prints the slug cut with Truncate; N must be a positive integer, otherwise exit 2 with "invalid --max-len".\
+    Acceptance: `slug --max-len 6 Hello World` prints `hello`\
+    Check: go test .\/cmd\/slug\
+    Existing behavior at risk: `slug <text>` without the flag, and text that starts with a hyphen./' "$_doc"
+	task add T1 S1 --files 'internal/slug/**'
+	task add T2 S2 --deps T1 --files 'cmd/**'
+
+	task start T1
+	cat >>internal/slug/slug.go <<'EOF'
+
+// Truncate cuts a slug to at most n characters and drops the hyphen
+// the cut may leave at the end.
+func Truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return strings.TrimRight(s[:n], "-")
+}
+EOF
+	cat >internal/slug/slug_test.go <<'EOF'
+package slug
+
+import "testing"
+
+func TestTruncate(t *testing.T) {
+	if got := Truncate("hello-world", 6); got != "hello" {
+		t.Fatalf("Truncate = %q, want %q", got, "hello")
+	}
+}
+EOF
+	git add internal/slug && git commit -qm "feat(slug): add Truncate"
+	task review T1
+	task done T1 "$(git rev-parse --short HEAD)"
+	task log "T1 done: slug.Truncate with TestTruncate green."
+
+	task start T2
+	cat >cmd/slug/main_test.go <<'EOF'
+package main
+
+import (
+	"bytes"
+	"testing"
+)
+
+func TestRunMaxLen(t *testing.T) {
+	var out, errb bytes.Buffer
+	if code := run([]string{"--max-len", "6", "Hello", "World"}, &out, &errb); code != 0 {
+		t.Fatalf("exit %d, stderr %q", code, errb.String())
+	}
+	if out.String() != "hello\n" {
+		t.Fatalf("got %q, want %q", out.String(), "hello\n")
+	}
+}
+EOF
+	task log "T2 started: RED test TestRunMaxLen written; run() does not exist yet."
+	echo 'Use --max-len N to cut long slugs.' >>README.md
+
+	# fingerprint of the tree, to prove the session changed nothing
+	{ git rev-parse HEAD; git status --porcelain --untracked-files=all; git diff; } | cksum >.t4l/journey.sum
+}
+
+checkpoints() {
+	reply_has 'max-len'
+	reply_has 'T2'
+	reply_has 'TestRunMaxLen|main_test\.go'
+	reply_has 'README'
+	transcript_has 'tasks/max-len\.md'
+	cmd '[ "$({ git rev-parse HEAD; git status --porcelain --untracked-files=all; git diff; } | cksum)" = "$(cat .t4l/journey.sum)" ]'
+	generic
+}
