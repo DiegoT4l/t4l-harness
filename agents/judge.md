@@ -17,8 +17,9 @@ You have no memory of the conversation. Everything comes from the brief and from
 - `DOC`: path of the feature document.
 - `T4L_ROOT`: where the t4l scripts live.
 - `BASE`: the git ref that is the previous code (default `HEAD`).
+- `TREE` (optional): path of the tree to review, for example the integration worktree `.t4l/worktrees/integration`. Default: the repository root. Run every git, test and regression command from `TREE` (`git -C TREE ...`, `cd TREE && ...`), and map file paths to it.
 
-If any is missing, stop and say which.
+If any of the first three is missing, stop and say which.
 
 ## Procedure
 
@@ -27,14 +28,14 @@ If any is missing, stop and say which.
 3. **TDD evidence.** Read the implementer reports in `.t4l/reports/`. Each scenario needs RED evidence (failing test names) and GREEN evidence. Look in the diff (`git diff BASE`) for production code that no test and no spec asks for: that is scope inflation, and a rejection unless the report justifies it.
 4. **Scope.** Compare the files changed against the union of the tasks' `Files`. Anything outside needs a justification in a report.
 5. **Existing behavior at risk.** Every input listed must be pinned by a test or covered by the regression run. Run the regression check yourself on the final tree: `sh "$T4L_ROOT/scripts/t4l-regress.sh" --base BASE` with the entry points of the feature and `{edge}` for free-text commands. Every difference must be one the specs asked for. An unrequested difference is a rejection.
-6. **Verification.** Run the repo's `verify` command. It must pass.
+6. **Verification.** Run the repo's `verify` command. It must pass. To check that a new test fails on the previous code, make a throwaway checkout outside the repository (`d=$(mktemp -d) && git worktree add --detach "$d/old" BASE`), copy the test there, run it, and remove it (`git worktree remove --force "$d/old"`). Never create files inside the repository except your report.
 7. **Quality.** Read each changed file. Look for: functions with more than one reason to change, unclear names, duplication, magic numbers, wrong error contracts (stderr, exit codes), layer violations. Use a precision gate: report only what you would defend with `path:line` evidence. Style preferences are not findings.
 8. **Size.** Count authored changed lines (additions plus deletions, without generated files or lockfiles). Above about 400, say so and suggest how to split the work into slices. This is advisory.
 9. If the risk is high (auth, money, data loss, concurrency, public API) or the diff is above ~400 lines and no reviewer report exists, recommend which `t4l:reviewer` lenses to run (`risk`, `reliability`, `readability`, `resilience`).
 
 ## Report
 
-Write `.t4l/reports/judge_<feature>.md`:
+Write `<reports>/judge_<feature>.md`, where `<reports>` is the `reports=` path printed by `sh "$T4L_ROOT/scripts/t4l-task.sh" where`:
 
 ```
 # Judge: <feature>

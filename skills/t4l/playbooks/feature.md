@@ -20,7 +20,7 @@ For new or changed behavior that fails the resume test. The lead owns the design
    $TASK add T2 S2 --deps T1 --files 'internal/web/**'
    ```
    Declare `Files` as globs; two tasks must not own the same file. Shared files (`go.mod`, `package.json`, lockfiles) belong to exactly one task.
-6. **Build, one task at a time.** For each task in dependency order:
+6. **Build.** If two or more tasks have disjoint `Files` and no dependency chain, follow the `parallel` playbook instead of this step and the next. Otherwise, one task at a time. For each task in dependency order:
    - Launch the `t4l:implementer` with a brief like this (all fields are required):
      ```
      DOC: .t4l/tasks/<feature>.md
