@@ -199,17 +199,17 @@ START="$HERE/hooks/session-start.sh"
 mkdir -p "$TMP/cfg/rules" "$TMP/cfg-with-copy/rules"
 echo copy >"$TMP/cfg-with-copy/rules/t4l.md"
 
-OUT=$(CLAUDE_CONFIG_DIR="$TMP/cfg" sh "$START" 2>&1)
+OUT=$(CLAUDE_CONFIG_DIR="$TMP/cfg" sh "$START" </dev/null 2>&1)
 RC=$?
 check "start: injects the kernel" 0 "# t4l kernel"
 case $OUT in T4L_ROOT=*) ;; *) FAIL=$((FAIL + 1)); echo "FAIL start: first line announces T4L_ROOT" ;; esac
 
-OUT=$(CLAUDE_CONFIG_DIR="$TMP/cfg-with-copy" sh "$START" 2>&1)
+OUT=$(CLAUDE_CONFIG_DIR="$TMP/cfg-with-copy" sh "$START" </dev/null 2>&1)
 RC=$?
 case $OUT in *"# t4l kernel"*) RC=1 ;; esac
 check "start: kernel body skipped when ~/.claude/rules/t4l.md exists" 0 "T4L_ROOT="
 
-OUT=$(T4L_KERNEL=off CLAUDE_CONFIG_DIR="$TMP/cfg" sh "$START" 2>&1)
+OUT=$(T4L_KERNEL=off CLAUDE_CONFIG_DIR="$TMP/cfg" sh "$START" </dev/null 2>&1)
 RC=$?
 case $OUT in *"# t4l kernel"*) RC=1 ;; esac
 check "start: T4L_KERNEL=off skips the kernel body" 0 "T4L_ROOT="
@@ -459,6 +459,31 @@ run_guard_at "$R" "$R/src/a.go" "t4l:workflow-master"
 check "workflow-master: cannot edit project files" 2 "does not edit project files"
 run_guard_at "$R" "$R/.t4l/worktrees/integration/src/a.go" "t4l:workflow-master"
 check "workflow-master: can resolve conflicts in the integration worktree" 0
+
+# --- session-start: optional tools ---------------------------------------------
+
+TOOLS="$TMP/tools"
+mkdir -p "$TOOLS"
+printf '#!/bin/sh\necho "$*" >>"%s/ccc.calls"\n' "$TOOLS" >"$TOOLS/ccc"
+printf '#!/bin/sh\nexit 0\n' >"$TOOLS/markitdown"
+chmod +x "$TOOLS/ccc" "$TOOLS/markitdown"
+GITDIR=$(dirname "$(command -v git)")
+
+new_repo
+OUT=$(printf '{"cwd":"%s"}' "$R" | PATH="$TOOLS:$GITDIR:/usr/bin:/bin" T4L_KERNEL=off sh "$START" 2>&1)
+RC=$?
+check "start: ccc installed but not enabled says how to enable it" 0 "t4l-search.sh --init"
+case $OUT in *"markitdown: installed"*) PASS=$((PASS + 1)); echo "ok   start: announces markitdown" ;; *) FAIL=$((FAIL + 1)); echo "FAIL start: markitdown not announced" ;; esac
+mkdir -p "$R/.cocoindex_code" && echo x >"$R/.cocoindex_code/settings.yml"
+OUT=$(printf '{"cwd":"%s"}' "$R" | PATH="$TOOLS:$GITDIR:/usr/bin:/bin" T4L_KERNEL=off sh "$START" 2>&1)
+RC=$?
+check "start: ccc enabled announces the search command" 0 "ccc: enabled in this repository"
+sleep 1
+assert_calls() { grep -q '^index' "$TOOLS/ccc.calls"; }
+if assert_calls; then PASS=$((PASS + 1)); echo "ok   start: refreshes the index in the background"; else FAIL=$((FAIL + 1)); echo "FAIL start: background index not run"; fi
+OUT=$(printf '{"cwd":"%s"}' "$R" | PATH="$GITDIR:/usr/bin:/bin" T4L_KERNEL=off sh "$START" 2>&1)
+RC=$?
+case $OUT in *ccc:* | *markitdown:*) FAIL=$((FAIL + 1)); echo "FAIL start: tools announced although not installed" ;; *) PASS=$((PASS + 1)); echo "ok   start: says nothing about tools that are not installed" ;; esac
 
 # --- t4l-init --------------------------------------------------------------
 

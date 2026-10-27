@@ -93,4 +93,12 @@ if ! { [ -f "$gi" ] && grep -qx '\.t4l/' "$gi"; }; then
 fi
 
 echo "t4l-init: wrote $cfg"
+if command -v ccc >/dev/null 2>&1; then
+	if [ -f "$root/.cocoindex_code/settings.yml" ]; then
+		echo "t4l-init: ccc (semantic code search) is enabled in this repository"
+	else
+		echo "t4l-init: ccc is installed; enable semantic code search here with: sh $(cd "$(dirname "$0")" && pwd)/t4l-search.sh --init"
+	fi
+fi
+command -v markitdown >/dev/null 2>&1 && echo "t4l-init: markitdown is installed (t4l-ingest.sh converts documents)"
 cat "$cfg"
