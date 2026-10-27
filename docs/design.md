@@ -158,6 +158,7 @@ Decisiones de la v0.2:
 ### Capa 5 — Medición
 - `CHECKPOINTS` genéricos del estado final (documento de feature coherente, una sola tarea en curso, toda tarea marcada con evidencia, tests verdes, sin código que ningún test pidió).
 - 5–10 **journeys** reproducibles (un bug, una feature chica, un refactor, una investigación) para comparar versiones del harness. Se escribe **después** de v0.3, no antes.
+- Hecho en la v0.5: ver la sección 13.
 
 ## 3. Carril grande en detalle
 
@@ -258,9 +259,13 @@ Plugin de Claude Code `t4l` (carpeta `plugin/` con `.claude-plugin/plugin.json`,
 
 - **v0.1 — Kernel y router.** `rules/t4l.md` en inglés, skill `t4l` con clasificación, carriles y selector de método (ODD / TDD / SDD), playbooks `investigate` y `bug`.
 - **v0.2 — Enforcement (hecha).** Hooks `post-edit-check` y `stop-verify`, `.t4l/config`, `/t4l:init`, `/t4l:correct` y tabla regla↔enforcer. 31 tests de shell (`sh tests/hooks.sh`), `shellcheck` limpio, y comprobado en una ejecución real de Claude Code.
-- **v0.3 — Carril grande (en curso).** `scripts/t4l-task.sh` (estado y coherencia del documento de feature), marcador `.t4l/state`, hook `guard` (puerta SDD y lead que no implementa), agentes `implementer`, `judge` y `reviewer`, playbooks `feature`, `refactor` y `ship`. Un implementador a la vez. Las tareas ya llevan `Status`, `Deps` y `Files` para que el tablero de la v0.4 no requiera migrar nada.
-- **v0.4 — `workflow-master`.** Ver la sección 10.
-- **v0.5 — Medición.** Checkpoints y journeys; mutación opcional; `perf`, `babysit`, `pickup`.
+- **v0.3 — Carril grande (hecha).** `scripts/t4l-task.sh` (estado y coherencia del documento de feature), marcador `.t4l/state`, hook `guard` (puerta SDD y lead que no implementa), agentes `implementer`, `judge` y `reviewer`, playbooks `feature`, `refactor` y `ship`. Un implementador a la vez. Las tareas ya llevan `Status`, `Deps` y `Files` para que el tablero de la v0.4 no requiera migrar nada.
+- **v0.4 — `workflow-master` (hecha).** Ver la sección 10. v0.4.1: integraciones opcionales (sección 12).
+- **v0.5 — Medición (en curso).** Por orden, cada parte con su commit y su prueba real:
+  - v0.5: checkpoints y journeys (sección 13).
+  - v0.5.1: playbook `pickup`, con un journey que falle sin él.
+  - v0.5.2: mutación opcional, Go con `gremlins`; TS solo como comando configurable.
+  - v0.5.3: playbooks `perf` y `babysit`.
 - **v1.0 — Plugin.** Empaquetado, `t4l:setup`, marketplace propio, documentación.
 
 ## 10. `workflow-master` (v0.4)
@@ -337,3 +342,29 @@ t4l funciona igual sin ellas. El hook `SessionStart` anuncia cuáles están inst
 
 `uv` 0.13.6 desde el release oficial de GitHub (checksum verificado) en `~/.local/bin`, porque `sudo pacman` pide contraseña. Ambas herramientas instaladas con `uv tool install`.
 
+
+## 13. Medición (v0.5)
+
+**Propósito:** saber si un cambio del harness lo mejora o lo empeora, con evidencia y no con impresiones. Las reglas en prosa se miden por lo que el modelo hace, no por lo que dicen.
+
+### Checkpoints genéricos (`scripts/t4l-checkpoints.sh`)
+
+Lo que debe cumplirse al final de cualquier sesión, sea cual sea la tarea. Se ejecuta en el repo o en un worktree; los journeys lo llaman al terminar cada sesión.
+
+| Checkpoint | Qué comprueba |
+|---|---|
+| `attribution` | Ningún commit nuevo (de cualquier rama) desde la base menciona a Claude o a Anthropic. |
+| `protected` | Las ramas protegidas (`protected_branches`, o `main` y `master`) no se movieron desde la base. |
+| `feature` | Un documento de feature activo pasa `t4l-task.sh check`; uno cerrado tiene informe del `judge`. |
+| `verify` | El comando `verify` de `.t4l/config` (o `--verify`) pasa. Respeta la regla de la config versionada. |
+
+Sin `--base` se omiten los dos primeros. "Sin código que ningún test pidió" no es determinista: lo juzga el `judge`, no un script.
+
+### Journeys (`journeys/*.journey`, `scripts/t4l-journey.sh`)
+
+- **Formato:** un archivo de shell por journey, con la descripción en la primera línea de comentario, `fixture=` y una o más llamadas `turn '<prompt>'`. Opcionalmente, `setup()` (por ejemplo, para crear `.t4l/config`) y `allow=` con herramientas extra, una por línea. `checkpoints()` usa los helpers del runner: `reply_has`, `reply_lacks`, `transcript_has`, `tool_used`, `tool_unused`, `changed`, `only_changed`, `clean`, `exists`, `absent`, `cmd` y `generic` (los checkpoints genéricos contra el commit del fixture).
+- **Fixture:** `journeys/fixtures/slug` es la copia limpia del sandbox (`0feb053`), versionada para que los journeys no dependan de `~/t4l-sandbox`. Cada ejecución la copia a un directorio temporal y hace `git init`.
+- **Sesión:** `claude -p --plugin-dir <harness> --output-format stream-json`, el prompt por stdin y los turnos siguientes con `--resume`. Permisos: `acceptEdits` y una lista de herramientas permitidas (Go, git, scripts de t4l y comandos de lectura). Lo denegado queda en `denials.txt` y en el resumen: un journey con denegaciones se lee antes de dar por bueno su resultado. Límite de gasto por sesión (`--budget`, 3 USD) y de tiempo (`--timeout`, 1200 s).
+- **Engram apagado por defecto** (`--settings`): las corridas de medición no escriben en la memoria del usuario. El resto del entorno (plugins, hooks globales, `block-ai-attribution`) es el real, porque es el que se mide.
+- **Resultados:** `.t4l/journeys/<fecha>-<rev>/`, con `summary.tsv` (resultado, checkpoints, costo, turnos, segundos, denegaciones) y, por ejecución, el transcript, las respuestas, las herramientas usadas y los checkpoints. `--repeat N` da tasas de acierto; `--compare A B` compara dos directorios por journey. Para medir otra versión, `--plugin-dir` apunta a un worktree de esa versión.
+- **Los journeys no corren en los tests de shell:** gastan tokens. `tests/journey.sh` prueba el runner con un `claude` falso.
