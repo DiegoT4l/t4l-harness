@@ -1,0 +1,66 @@
+# Perf: a quadratic slug.Make is made fast; a baseline is measured before the edit and the numbers are explained.
+fixture=slug
+turn 'slug.Make is very slow on big inputs: a 1 MB text takes minutes. make it fast, without changing what it outputs.'
+
+# Make builds its result with string concatenation: every rune copies the whole
+# result so far, O(n^2). The output (one hyphen per non-alphanumeric rune, no
+# trimming) is the behavior to keep, odd as it is.
+setup() {
+	cat >internal/slug/slug.go <<'EOF'
+// Package slug turns free text into URL-friendly slugs.
+package slug
+
+import "strings"
+
+// Make lowercases s and replaces every run of non-alphanumeric
+// characters with a single hyphen.
+func Make(s string) string {
+	out := ""
+	for _, r := range strings.ToLower(s) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			out += string(r)
+		} else {
+			out += "-"
+		}
+	}
+	return out
+}
+EOF
+	git -c user.email=t4l@example.com -c user.name=t4l commit -qam "slug: build the result as a string"
+}
+
+checkpoints() {
+	# measured before touching the code, and the reply carries numbers
+	transcript_order 'Bench|-bench|time |Since\(' '^(Edit|Write) .*internal/slug/slug\.go|^Bash .*> *internal/slug/slug\.go'
+	reply_has '[0-9][0-9.,]* ?(ns|µs|us|ms|s)(/op)?\b'
+	reply_has '[Aa]lloc|quadratic|O\(n|square'
+	reply_has 'Regression:'
+	# the output is unchanged, the bug included, and 1 MB now takes well under a second
+	cmd '[ "$(go run ./cmd/slug "Hello, World!")" = "hello--world-" ]'
+	cmd '[ "$(go run ./cmd/slug "café")" = "caf-" ]'
+	cmd 'cat >internal/slug/zz_journey_test.go <<EOF
+package slug
+
+import (
+	"strings"
+	"testing"
+	"time"
+)
+
+func TestJourneyLinear(t *testing.T) {
+	in := strings.Repeat("Ab, ", 250000)
+	start := time.Now()
+	got := Make(in)
+	if d := time.Since(start); d > time.Second {
+		t.Fatalf("Make on 1 MB took %v", d)
+	}
+	if want := strings.Repeat("ab--", 250000); got != want {
+		t.Fatal("output changed")
+	}
+}
+EOF
+go test -run TestJourneyLinear -timeout 60s ./internal/slug; rc=$?; rm -f internal/slug/zz_journey_test.go; exit $rc'
+	cmd 'go test ./...'
+	tool_unused Agent
+	generic
+}
