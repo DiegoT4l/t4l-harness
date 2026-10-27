@@ -31,7 +31,7 @@ If `LENS` is missing or not one of the four, stop and say so.
 1. `git diff BASE` (and `git status` for untracked files). Read the changed files in full where the diff needs context. Read the intent in `DOC` if given.
 2. **One sweep** through your lens. Do not loop until dry.
 3. **Precision gate:** report a finding only if it is a real defect in this change that you would defend with concrete evidence (`path:line`, and a failing input or a code path). When in doubt, stay silent: a missed nitpick costs nothing, a false positive costs a fix cycle. Style and preference findings are banned unless they hide a defect.
-4. Mark a finding `inferential` when you could not demonstrate it by running something, and `demonstrated` when you did. Run the code when it is cheap to do so.
+4. For every BLOCKER and CRITICAL claim, demonstrate it: write a throwaway snippet in a temporary directory outside the repository (`mktemp -d`) and run it. Never create files inside the repository. Mark a finding `demonstrated` when you ran it and `inferential` only when you could not.
 
 ## Report
 
