@@ -18,14 +18,16 @@ rules/           kernel que se inyecta en cada sesión (t4l.md)
 skills/          t4l (router + playbooks), init, correct
 agents/          implementer, judge, reviewer, workflow-master
 hooks/           hooks.json + scripts POSIX sh (guard, verificación, ramas, tamaño, kernel)
-scripts/         t4l-init, t4l-task, t4l-regress, t4l-size, t4l-integrate, t4l-search, t4l-ingest
-tests/           hooks, regress, task, size, integrate, integrations
+scripts/         t4l-init, t4l-task, t4l-regress, t4l-size, t4l-integrate, t4l-search, t4l-ingest,
+                 t4l-checkpoints, t4l-journey
+journeys/        sesiones reproducibles para medir el harness, con su fixture (fixtures/slug)
+tests/           hooks, regress, task, size, integrate, integrations, journey
 docs/            referencias, diseño, cómo probar
 ```
 
 ## Estado
 
-**v0.4.** Kernel, router `t4l` con selector de método (ODD / TDD / SDD), playbooks `investigate`, `bug`, `feature`, `refactor`, `ship` y `parallel`, hooks de verificación opt-in (`/t4l:init`), `/t4l:correct`, chequeo de regresión (`t4l-regress.sh` con `{edge}`), carril grande completo (documento de feature con `t4l-task.sh`, `guard`, agentes `implementer`, `judge` y `reviewer`) y el **`workflow-master`**: tablero Kanban con límite WIP, modo paralelo en worktrees aislados, alcance por tarea hecho cumplir por el `guard`, medición de tamaño por rebanada (`t4l-size.sh`) e integración en una rama aparte (`t4l-integrate.sh`). **v0.4.1:** integraciones opcionales con cocoindex-code (búsqueda semántica, `t4l-search.sh`) y markitdown (documentos a Markdown, `t4l-ingest.sh`). Ver `docs/design.md`.
+**v0.4.** Kernel, router `t4l` con selector de método (ODD / TDD / SDD), playbooks `investigate`, `bug`, `feature`, `refactor`, `ship` y `parallel`, hooks de verificación opt-in (`/t4l:init`), `/t4l:correct`, chequeo de regresión (`t4l-regress.sh` con `{edge}`), carril grande completo (documento de feature con `t4l-task.sh`, `guard`, agentes `implementer`, `judge` y `reviewer`) y el **`workflow-master`**: tablero Kanban con límite WIP, modo paralelo en worktrees aislados, alcance por tarea hecho cumplir por el `guard`, medición de tamaño por rebanada (`t4l-size.sh`) e integración en una rama aparte (`t4l-integrate.sh`). **v0.4.1:** integraciones opcionales con cocoindex-code (búsqueda semántica, `t4l-search.sh`) y markitdown (documentos a Markdown, `t4l-ingest.sh`). **v0.5:** medición: checkpoints genéricos del estado final (`t4l-checkpoints.sh`) y journeys headless que comparan versiones del harness (`t4l-journey.sh`). Ver `docs/design.md`.
 
 ## Probar
 
@@ -33,7 +35,15 @@ docs/            referencias, diseño, cómo probar
 cd ~/t4l-sandbox && claude --plugin-dir ~/t4l-harness
 ```
 
-Escenarios y qué observar en [`docs/testing.md`](docs/testing.md). Tests de los scripts: `for t in hooks regress task size integrate integrations; do sh tests/$t.sh; done`.
+Escenarios y qué observar en [`docs/testing.md`](docs/testing.md). Tests de los scripts: `for t in hooks regress task size integrate integrations journey; do sh tests/$t.sh; done`.
+
+Medir una versión del harness (gasta tokens; cada journey corre en una copia desechable):
+
+```bash
+sh scripts/t4l-journey.sh --list
+sh scripts/t4l-journey.sh --all                       # resultados en .t4l/journeys/<fecha>-<rev>
+sh scripts/t4l-journey.sh --compare .t4l/journeys/A .t4l/journeys/B
+```
 
 ## Restricciones heredadas del entorno
 
