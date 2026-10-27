@@ -1,13 +1,13 @@
 # Playbook: refactor
 
-A behavior-preserving change to structure or shape. Default mode: ODD + TDD with characterization tests. If it fails the resume test (many modules, several sessions), run it through the `feature` playbook with the specs stating "behavior unchanged".
+A behavior-preserving change to structure or shape. A **mechanical** refactor (rename, extract, inline, move) is ODD only: the regression check below is its proof. A refactor that **reshapes logic** (merging branches, changing data structures, splitting responsibilities) is ODD + TDD with characterization tests. If it fails the resume test (many modules, several sessions), run it through the `feature` playbook with the specs stating "behavior unchanged".
 
 The deliverable is the same behavior with less code. If the refactor adds more than it removes, say why.
 
 ## Steps
 
 1. **State the invariant** in one sentence: what must not change (outputs, exit codes, public API, persisted formats).
-2. **Pin today's behavior first.** For every entry point that goes through the code to be changed, make sure a test pins its current behavior, including edge inputs. Where none exists, write a characterization test and watch it pass on the old code. Commit these tests before the change when commits are authorized.
+2. **Pin today's behavior first.** Mechanical refactor: the regression check over every entry point (with `{edge}`) is the pin; run it against the base before you finish. Logic-reshaping refactor: for every entry point that goes through the code, make sure a test pins its current behavior, including edge inputs; where none exists, write a characterization test and watch it pass on the old code. Commit these tests before the change when commits are authorized.
 3. **Take the baseline.** Note the base ref (`HEAD` before you start). The regression script compares against it.
 4. **Subtract before you add.** Remove dead code, redundant validators and stale stubs first, then reshape on the simpler base.
 5. **Change in small verifiable steps.** After each step the tests are green. Keep each step reviewable (~400 changed lines at most).

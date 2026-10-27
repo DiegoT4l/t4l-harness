@@ -61,7 +61,7 @@ Rules:
 | Bug with a deterministic repro | `playbooks/bug.md` | ODD + TDD |
 | Bug without a repro yet | `playbooks/bug.md`, reproduce step | ODD only until reproduced, then TDD |
 | New or changed behavior that fails the resume test | `playbooks/feature.md` | ODD + SDD or ODD + TDD |
-| Behavior-preserving change of structure | `playbooks/refactor.md` | ODD + TDD (characterization first) |
+| Behavior-preserving change of structure | `playbooks/refactor.md` | ODD only if mechanical (rename, extract, inline); ODD + TDD with characterization tests if it reshapes logic |
 | Commit, branch or open a PR | `playbooks/ship.md` | ODD only |
 | Anything else | no playbook yet: apply the kernel and the mode procedure above | per section 4 |
 

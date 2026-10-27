@@ -23,13 +23,13 @@ Never classify by file count, command count or because a todo list was requested
 ODD is always the backbone. On top of it, pick the cheapest mode that fits the task:
 
 - **ODD only**: small understood change, config, docs, scripts, perf, mechanical migration, no runnable test.
-- **ODD + TDD**: observable behavior with a deterministic runnable test (bugs, bounded new logic, refactors). Observed RED, then GREEN, then REFACTOR.
+- **ODD + TDD**: observable behavior with a deterministic runnable test (bugs, bounded new logic, refactors). Observed RED, then GREEN, then REFACTOR. A refactor that only renames, extracts or inlines is ODD only plus the regression check; one that reshapes logic (merging branches, new data structures) is ODD + TDD, with characterization tests that pass on the old code written first.
 - **ODD + SDD**: ambiguous or public-API behavior, real product decisions, cross-module work. Write specs, get the user's approval, then TDD per scenario. On a small change the specs go inline in the reply (no task document), in this shape, and then stop:
   - `S1. <behavior with the exact input and output>` with `Scenario: Given / When / Then`.
   - `Existing behavior at risk:` the inputs that work today and might change, found by reading the code you will touch (text that looks like an option, empty input, arguments in new positions), or `none` and why. Never omit this line.
   - `Assumptions to confirm:` each decision the user did not specify, with your proposed default.
 
-Escalate only on a signal: ambiguous spec, behavior you would have to invent, two failed fixes sharing one premise, high risk, need for approval. State the choice in one line, for example `ODD + TDD: bug with deterministic repro`. The user can override it. Full procedure: skill `t4l`.
+Escalate only on a signal: ambiguous spec, behavior you would have to invent, two failed fixes sharing one premise, high risk, need for approval. Open your first message about a change with that choice in one line, for example `ODD + TDD: bug with deterministic repro`. The user can override it. Full procedure: skill `t4l`.
 
 ## Delegate by evidence, not by habit
 
@@ -73,6 +73,7 @@ When the same correction happens twice, do not write a longer instruction. Enfor
 ## Environment invariants
 
 - Never leave any trace of Claude, Claude Code or Anthropic in commits, PRs, issues, code or docs.
+- Never commit to `main` or `master`: create a branch first (`git switch -c <type>/<short-name>`). Commit or push only when the user asks.
 - Never install or suggest Homebrew; use pacman/paru or upstream binaries.
 - Do not duplicate Engram: its own protocol handles memory. t4l only saves decisions and mirrors the feature document.
 
