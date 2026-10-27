@@ -1,0 +1,11 @@
+# Large lane with SDD: feature document and pending gate, no project file written.
+fixture=slug
+turn 'Add a --max-len N flag to the slug command. Treat this as a large-lane feature and follow the t4l feature playbook with SDD. Write the specs and stop for my approval.'
+
+checkpoints() {
+	exists '.t4l/tasks/*.md'
+	cmd 'grep -q "^gate=pending" .t4l/state'
+	cmd 'grep -q "Existing behavior at risk" .t4l/tasks/*.md'
+	clean
+	generic
+}

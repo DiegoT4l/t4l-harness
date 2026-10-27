@@ -1,0 +1,16 @@
+# Bug with a deterministic repro: ODD + TDD, the failing test is seen before the fix.
+fixture=slug
+turn 'go run ./cmd/slug "Hello, World!" prints hello--world-, it should print hello-world. fix it'
+
+checkpoints() {
+	reply_has 'ODD \+ TDD'
+	reply_has 'Regression:'
+	transcript_has '--- FAIL'
+	changed '*_test.go'
+	changed internal/slug/slug.go
+	cmd 'go test ./...'
+	cmd '[ "$(go run ./cmd/slug "Hello, World!")" = hello-world ]'
+	tool_unused Agent
+	absent .t4l/tasks
+	generic
+}

@@ -1,0 +1,13 @@
+# A new flag with unspecified behavior: inline SDD, specs with risk and assumptions, stop before code.
+fixture=slug
+turn 'add a --max-len flag to the slug command'
+
+checkpoints() {
+	reply_has 'ODD \+ SDD'
+	reply_has 'S1'
+	reply_has 'Existing behavior at risk'
+	reply_has '[Aa]ssumptions'
+	clean
+	absent .t4l/tasks
+	generic
+}
