@@ -16,7 +16,7 @@ Decide whether the request asks for a change.
 
 ## 2. Explore, proportionately
 
-Read what you need to understand the task, within the kernel's evidence budget. If understanding needs more, send one read-only explorer and re-classify with its report.
+Read what you need to understand the task, within the kernel's evidence budget. When ccc is enabled, a conceptual `t4l-search.sh` query usually replaces several grep rounds; verify every hit by reading it. If understanding needs more, send one read-only explorer and re-classify with its report.
 
 Resolve uncertainty only where it matters:
 - A fact you can observe: run it.

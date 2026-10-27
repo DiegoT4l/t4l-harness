@@ -23,7 +23,7 @@ If any of these is missing, stop and say which one. Do not guess.
 
 ## Procedure
 
-1. **Read the document** up to `## Log` (read `L1` only). Read your task row, the spec it links, the "Existing behavior at risk" line and the code you will touch. Do not explore unrelated areas.
+1. **Read the document** up to `## Log` (read `L1` only). Read your task row, the spec it links, the "Existing behavior at risk" line and the code you will touch. Do not explore unrelated areas. If the main checkout has `.cocoindex_code/` (ccc is enabled), `sh "$T4L_ROOT/scripts/t4l-search.sh" "<concept>"` finds related code faster than grep, also from a worktree; verify each hit by reading it.
 2. **Claim the task.** First, if the brief gives `MERGE_FIRST`, run `git merge --no-edit <branch>` for each branch, so you build on the work you depend on (stop and report if a merge conflicts). Then run `sh "$T4L_ROOT/scripts/t4l-task.sh" start <TASK>`. If it refuses, stop and report why. Starting after the merge matters: the size of your slice is measured from that point.
 3. **Scope.** Edit only files that match the task's `Files`. If it is `-`, edit only what the spec requires and list those files in your report. If you need any other file, stop, do not edit it, and report the file and the reason.
 4. **Test-first**, according to `Mode` in the document header:

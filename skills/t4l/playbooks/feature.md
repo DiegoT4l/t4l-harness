@@ -6,13 +6,13 @@ For new or changed behavior that fails the resume test. The lead owns the design
 
 ## Steps
 
-1. **Understand.** Explore within the evidence budget (the built-in `Explore` agent for more than ~5 lookups). Name the data shape first. Decide the mode: `sdd` when behavior must be invented or is public, otherwise `tdd`.
+1. **Understand.** Explore within the evidence budget (`t4l-search.sh` for conceptual questions when ccc is enabled, the built-in `Explore` agent for more than ~5 lookups). If the user gave documents (requirements in docx, xlsx, pptx...), ingest them first with `t4l-ingest.sh`: the specs will quote them from `.t4l/inputs/`. Name the data shape first. Decide the mode: `sdd` when behavior must be invented or is public, otherwise `tdd`.
 2. **Open the feature.**
    ```bash
    $TASK new <feature> --mode <sdd|tdd> --request "<the user's request, verbatim>"
    ```
    This creates `.t4l/tasks/<feature>.md` and `.t4l/state`. With `sdd`, the guard now blocks every write outside `.t4l/` until the specs are approved.
-3. **Write the specs** in the document: `S1..Sn` quoting the user's exact strings, scenarios (Given/When/Then), `Existing behavior at risk` (read the code that will change; include text that looks like an option, empty input, new argument positions) and the assumptions to confirm. Mirror the document to Engram under `t4l/<feature>/tasks`.
+3. **Write the specs** in the document: `S1..Sn` quoting the user's exact strings, scenarios (Given/When/Then), `Existing behavior at risk` (read the code that will change and search for every entry point that reaches it, with `t4l-search.sh` when available; include text that looks like an option, empty input, new argument positions) and the assumptions to confirm. Mirror the document to Engram under `t4l/<feature>/tasks`.
 4. **Gate (sdd).** Show the specs, list the assumptions and stop. After the user approves, run `$TASK approve`. It refuses specs that are still the template or lack `Existing behavior at risk`.
 5. **Plan the tasks.** One task per coherent behavior, each about 400 changed lines or less, with its tests and docs:
    ```bash

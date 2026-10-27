@@ -24,7 +24,7 @@ If any of the first three is missing, stop and say which.
 ## Procedure
 
 1. `sh "$T4L_ROOT/scripts/t4l-task.sh" check` must print `check: ok`. If not, the verdict is `CHANGES_REQUESTED` with those problems.
-2. **Specs and scenarios.** Read every spec and scenario. For each one, find the test that verifies it (search the test names and bodies). A scenario without a test is a rejection. Quote `path:line` for each match.
+2. **Specs and scenarios.** Read every spec and scenario. For each one, find the test that verifies it (search the test names and bodies; `sh "$T4L_ROOT/scripts/t4l-search.sh" "<scenario>"` helps when ccc is enabled, but cite only what you read). A scenario without a test is a rejection. Quote `path:line` for each match.
 3. **TDD evidence.** Read the implementer reports in `.t4l/reports/`. Each scenario needs RED evidence (failing test names) and GREEN evidence. Look in the diff (`git diff BASE`) for production code that no test and no spec asks for: that is scope inflation, and a rejection unless the report justifies it.
 4. **Scope.** Compare the files changed against the union of the tasks' `Files`. Anything outside needs a justification in a report.
 5. **Existing behavior at risk.** Every input listed must be pinned by a test or covered by the regression run. Run the regression check yourself on the final tree: `sh "$T4L_ROOT/scripts/t4l-regress.sh" --base BASE` with the entry points of the feature and `{edge}` for free-text commands. Every difference must be one the specs asked for. An unrequested difference is a rejection.

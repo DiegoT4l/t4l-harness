@@ -5,7 +5,7 @@ Read-only. Answers a question about how something works, why it was built that w
 ## Steps
 
 1. Restate the question in one sentence. If it is really a request to change something, go back to the router.
-2. Gather evidence within the kernel budget. Prefer primary sources: the code, tests, git history, logs, official docs. Past decisions: search Engram first.
+2. Gather evidence within the kernel budget. Prefer primary sources: the code, tests, git history, logs, official docs. Past decisions: search Engram first. For conceptual questions about code, start with `t4l-search.sh` when ccc is enabled, then read each hit; a search result alone is not evidence. Documents the user provides go through `t4l-ingest.sh` first.
 3. If the evidence needs more than about 5 sequential lookups, send one read-only explorer and ask for at most 2k tokens with `path:line` references.
 4. For "why" questions, use history (`git log -S`, `git blame`, linked PRs and issues) before theorizing.
 5. For "is it safe to change X" questions, name what could break outside the diff, and prove the one fact it depends on by running real code, not by reading it.

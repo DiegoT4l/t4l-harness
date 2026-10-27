@@ -7,7 +7,7 @@ Be scientific. Every shipped line traces to runtime evidence. A "might help" gua
 ## Steps
 
 1. **Reproduce it yourself**, on the same surface the user hit (CLI, HTTP endpoint, UI, test). Ask the user only with a specific reason the surface cannot be reached, and only after driving it as far as it goes. If it will not reproduce, tighten the conditions (data, timing, environment) before giving up, and say what you tried.
-2. **Find the root cause by elimination.** List candidate hypotheses and rule them out one at a time, each pass taking the split that removes the most remaining space. Use runtime evidence: logs, debugger output, added instrumentation. When state is unclear, instrument and read it back; do not infer.
+2. **Find the root cause by elimination.** Seed the hypotheses with the code involved (`t4l-search.sh` for the behavior, when ccc is enabled). List candidate hypotheses and rule them out one at a time, each pass taking the split that removes the most remaining space. Use runtime evidence: logs, debugger output, added instrumentation. When state is unclear, instrument and read it back; do not infer.
    - Use history (`git log -S`, `git bisect`) to find when it broke.
    - If two fixes that share one premise have failed the same check, write the premise down and test it directly before a third attempt.
 3. **Write the failing test** that captures the bug, through the public interface, and observe it fail for the right reason. If no cheap deterministic test exists, say so and use the repro itself as the check.
