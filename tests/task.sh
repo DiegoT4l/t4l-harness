@@ -221,6 +221,82 @@ check "status: no active feature" 0 "no active feature"
 T start T1
 check "start: no active feature" 1 "no active feature"
 
+# --- parallel mode, board, overlap ------------------------------------------
+
+# TW <worktree> <args...>: run the script from inside a linked worktree.
+TW() {
+	_w=$1
+	shift
+	OUT=$(cd "$_w" && sh "$TASK" "$@" 2>&1)
+	RC=$?
+}
+
+new_wt() { # name -> $WT
+	WT="$R/.claude/worktrees/$1"
+	git -C "$R" worktree add -q -b "wt-$1" "$WT" HEAD
+}
+
+new_repo
+T new f --mode tdd --request "r"
+T add T1 S1 --files 'cmd/**'
+T add T2 S1 --files 'cmd/x/**'
+T add T3 S1 --files 'internal/**'
+T add T4 S1 --files 'cmdline/**'
+T add T5 S1
+T plan-check
+check "plan-check: reports overlapping Files and undeclared Files" 1 "T1 and T2 may overlap"
+case $OUT in *"T5 has no Files"*) ;; *) FAIL=$((FAIL + 1)); echo "FAIL plan-check: undeclared Files not reported" ;; esac
+case $OUT in *"T1 and T4"*) FAIL=$((FAIL + 1)); echo "FAIL plan-check: cmd/** and cmdline/** do not overlap" ;; *) PASS=$((PASS + 1)); echo "ok   plan-check: cmd/** and cmdline/** do not overlap" ;; esac
+case $OUT in *"T1 and T3"*) FAIL=$((FAIL + 1)); echo "FAIL plan-check: cmd/** and internal/** do not overlap" ;; *) PASS=$((PASS + 1)); echo "ok   plan-check: cmd/** and internal/** do not overlap" ;; esac
+
+mkdir -p "$R/cmd/slug" && echo x >"$R/cmd/slug/main.go"
+(cd "$R" && sh "$TASK" plan-check >"$TMP/pc.out" 2>&1)
+assert "plan-check: overlap is detected even when the globbed directories exist" grep -q "T1 and T2 may overlap" "$TMP/pc.out"
+rm -rf "$R/cmd"
+
+T parallel on
+check "parallel on: WIP limit 2" 0 "limit 2"
+assert "parallel on: ignores .claude/worktrees/ locally (.git/info/exclude)" grep -qx '\.claude/worktrees/' "$R/.git/info/exclude"
+assert "parallel on: does not touch the tracked .gitignore" sh -c "! grep -q 'claude/worktrees' '$R/.gitignore'"
+assert "parallel on: state records it" has '^parallel=1' "$R/.t4l/state"
+
+T start T1
+check "start: parallel mode refuses the main checkout" 1 "isolated worktree"
+new_wt a
+TW "$WT" start T5
+check "start: parallel mode refuses undeclared Files" 1 "declare Files"
+TW "$WT" start T1
+check "start: parallel mode accepts a worktree with declared Files" 0 "T1: doing"
+assert "start: registry records the worktree" has "^worktree=$WT" "$R/.t4l/board/T1.env"
+assert "start: registry records the branch" has '^branch=wt-a' "$R/.t4l/board/T1.env"
+assert "start: registry records the files" has '^files=cmd/\*\*' "$R/.t4l/board/T1.env"
+
+new_wt b
+TW "$WT" start T2
+check "start: refuses a task whose Files overlap a doing task" 1 "overlaps with T1"
+TW "$WT" start T3
+check "start: a disjoint task fits in the second WIP slot" 0 "T3: doing"
+new_wt c
+TW "$WT" start T4
+check "start: the third task hits the WIP limit" 1 "WIP limit"
+
+T board
+check "board: shows WIP and owners" 0 "WIP 2/2"
+case $OUT in *"T1[wt-a]"*) ;; *) FAIL=$((FAIL + 1)); echo "FAIL board: owner branch not shown" ;; esac
+
+TW "$R/.claude/worktrees/a" status
+check "status: works from inside a worktree (state lives in the main root)" 0 "feature=f"
+
+T review T1
+T reopen T1 "scope changed"
+assert "reopen: removes the registry entry" test ! -f "$R/.t4l/board/T1.env"
+
+TW "$R/.claude/worktrees/a" where
+check "where: prints the main checkout's reports dir, even from a worktree" 0 "reports=$R/.t4l/reports"
+
+T parallel off
+check "parallel off: back to WIP 1" 0 "limit 1"
+
 echo
 echo "passed: $PASS  failed: $FAIL"
 [ "$FAIL" -eq 0 ]

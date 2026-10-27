@@ -11,7 +11,13 @@
 #   approve                    specs approved by the user: gate=approved, phase=implementing
 #   add <ID> <SPEC> [--deps T1,T2] [--files GLOB,GLOB]
 #                              append a task (status todo); ID is T<number>, SPEC is S<number>
-#   start <ID>                 todo -> doing (deps in review or done, WIP respected)
+#   start <ID>                 todo -> doing (deps in review or done, WIP respected); records
+#                              the worktree and branch of the caller in .t4l/board/<ID>.env
+#   parallel on|off            parallel mode: WIP 2 by default, Files required, no overlap,
+#                              subagents work in isolated worktrees
+#   board                      kanban view: columns, WIP and owners
+#   where                      absolute paths of the main checkout, state and reports
+#   plan-check                 list undeclared Files and overlapping Files between tasks
 #   review <ID>                doing -> review
 #   done <ID> [SHA]            review|doing -> done; SHA is optional but must exist if given
 #   reopen <ID> <REASON>       back to todo, reason appended to the log
@@ -21,7 +27,8 @@
 #   close                      all tasks done and check clean: phase=done
 # Exit status: 0 ok, 1 refused or problems found, 2 usage error.
 
-set -u
+# Files globs are data: never expand them against the filesystem.
+set -u -f
 
 die() {
 	echo "t4l-task: $*" >&2
@@ -29,11 +36,15 @@ die() {
 }
 
 usage() {
-	sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//' >&2
+	sed -n '2,31p' "$0" | sed 's/^# \{0,1\}//' >&2
 	exit 2
 }
 
-root=$(git rev-parse --show-toplevel 2>/dev/null) || die "not inside a git repository"
+gc=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || die "not inside a git repository"
+case $gc in
+*/.git) root=$(dirname "$gc") ;;
+*) root=$(git rev-parse --show-toplevel) ;;
+esac
 dir="$root/.t4l"
 state="$dir/state"
 cfg="$dir/config"
@@ -99,6 +110,38 @@ log_append() {
 }
 
 spec_ids() { grep -o '^S[0-9][0-9]*\.' "$doc" | tr -d '.'; }
+
+glob_prefix() { # static prefix of a glob, up to the first wildcard
+	_gp_g=$1
+	printf '%s' "${_gp_g%%[*?[]*}"
+}
+
+globs_overlap() { # "a,b" "c,d" -> 0 when any pair may overlap (conservative)
+	# variables are prefixed _go_ because sh has no local scope
+	for _go_a in $(printf '%s' "$1" | tr ',' ' '); do
+		for _go_b in $(printf '%s' "$2" | tr ',' ' '); do
+			_go_pa=$(glob_prefix "$_go_a")
+			_go_pb=$(glob_prefix "$_go_b")
+			case $_go_pa in "$_go_pb"*) return 0 ;; esac
+			case $_go_pb in "$_go_pa"*) return 0 ;; esac
+		done
+	done
+	return 1
+}
+
+parallel_on() { [ "$(state_get parallel)" = 1 ]; }
+
+wip_limit() {
+	if parallel_on; then cfg_get wip 2; else cfg_get wip 1; fi
+}
+
+board_file() { printf '%s/board/%s.env' "$dir" "$1"; }
+
+task_ids_with() { # status
+	for _t in $(task_ids); do
+		[ "$(task_field "$_t" 3)" = "$1" ] && echo "$_t"
+	done
+}
 
 cmd_new() {
 	[ $# -ge 1 ] || usage
@@ -227,11 +270,116 @@ cmd_start() {
 		*) die "$_id depends on $_d, which is '$(task_field "$_d" 3)'; it must be in review or done" ;;
 		esac
 	done
-	_wip=$(cfg_get wip 1)
-	_doing=$(task_ids | while read -r t; do [ "$(task_field "$t" 3)" = doing ] && echo "$t"; done | wc -l)
+	_files=$(task_field "$_id" 5)
+	_here=$(git rev-parse --show-toplevel 2>/dev/null)
+	if parallel_on; then
+		{ [ -n "$_files" ] && [ "$_files" != "-" ]; } || die "parallel mode: declare Files for $_id before starting it"
+		[ "$_here" != "$root" ] || die "parallel mode: start $_id from inside your isolated worktree, not from the main checkout"
+		for _o in $(task_ids_with doing); do
+			if globs_overlap "$_files" "$(task_field "$_o" 5)"; then
+				die "$_id overlaps with $_o, which is doing (Files $_files vs $(task_field "$_o" 5))"
+			fi
+		done
+	fi
+	_wip=$(wip_limit)
+	_doing=$(task_ids_with doing | wc -l)
 	[ "$_doing" -lt "$_wip" ] || die "WIP limit reached ($_doing doing, limit $_wip)"
 	task_set "$_id" 3 doing
+	mkdir -p "$dir/board"
+	{
+		printf 'task=%s\n' "$_id"
+		printf 'worktree=%s\n' "$_here"
+		printf 'branch=%s\n' "$(git branch --show-current 2>/dev/null)"
+		printf 'base=%s\n' "$(git rev-parse HEAD 2>/dev/null)"
+		printf 'files=%s\n' "$_files"
+	} >"$(board_file "$_id")"
 	echo "$_id: doing"
+}
+
+cmd_parallel() {
+	need_active
+	case ${1:-} in
+	on)
+		state_set parallel 1
+		# local ignore, so the user's tracked .gitignore is not modified
+		_ex="$gc/info/exclude"
+		mkdir -p "$gc/info"
+		if ! { [ -f "$_ex" ] && grep -qx '\.claude/worktrees/' "$_ex"; }; then
+			printf '.claude/worktrees/\n' >>"$_ex"
+		fi
+		echo "parallel mode on (WIP limit $(wip_limit))"
+		;;
+	off)
+		state_set parallel 0
+		echo "parallel mode off (WIP limit $(wip_limit))"
+		;;
+	*) usage ;;
+	esac
+}
+
+cmd_where() {
+	echo "root=$root"
+	echo "state=$state"
+	echo "reports=$dir/reports"
+	echo "tasks=$dir/tasks"
+}
+
+cmd_board() {
+	need_active
+	echo "feature=$feature phase=$phase parallel=$(state_get parallel | sed 's/^$/0/') WIP $(task_ids_with doing | wc -l)/$(wip_limit)"
+	for _c in todo doing review "done"; do
+		printf '%-7s' "$_c"
+		for _t in $(task_ids_with "$_c"); do
+			printf ' %s' "$_t"
+			if [ "$_c" = doing ] || [ "$_c" = review ]; then
+				_bf=$(board_file "$_t")
+				[ -f "$_bf" ] && printf '[%s]' "$(sed -n 's/^branch=//p' "$_bf")"
+			fi
+			_dp=$(task_field "$_t" 4)
+			[ "$_c" = todo ] && [ "$_dp" != "-" ] && printf '(after %s)' "$_dp"
+		done
+		echo
+	done
+}
+
+cmd_plan_check() {
+	need_active
+	_problems=""
+	_ids=$(task_ids)
+	for _t in $_ids; do
+		[ "$(task_field "$_t" 3)" = "done" ] && continue
+		_f=$(task_field "$_t" 5)
+		if [ -z "$_f" ] || [ "$_f" = "-" ]; then
+			_problems="$_problems- $_t has no Files declared
+"
+		fi
+	done
+	# every unordered pair once
+	# shellcheck disable=SC2086  # word splitting is intended
+	set -- $_ids
+	while [ $# -gt 0 ]; do
+		_a=$1
+		shift
+		for _b in "$@"; do
+			[ "$(task_field "$_a" 3)" = "done" ] && continue
+			[ "$(task_field "$_b" 3)" = "done" ] && continue
+			_fa=$(task_field "$_a" 5)
+			_fb=$(task_field "$_b" 5)
+			{ [ -n "$_fa" ] && [ "$_fa" != "-" ] && [ -n "$_fb" ] && [ "$_fb" != "-" ]; } || continue
+			# tasks that depend directly on each other never run together
+			case ",$(task_field "$_a" 4)," in *",$_b,"*) continue ;; esac
+			case ",$(task_field "$_b" 4)," in *",$_a,"*) continue ;; esac
+			if globs_overlap "$_fa" "$_fb"; then
+				_problems="$_problems- $_a and $_b may overlap ($_fa vs $_fb); add a dependency or split the Files
+"
+			fi
+		done
+	done
+	if [ -n "$_problems" ]; then
+		printf 'plan-check: problems found\n%s' "$_problems"
+		return 1
+	fi
+	echo "plan-check: ok (tasks can run in parallel where dependencies allow)"
 }
 
 cmd_review() {
@@ -267,6 +415,7 @@ cmd_reopen() {
 	shift
 	task_set "$_id" 3 todo
 	task_set "$_id" 6 "-"
+	rm -f "$(board_file "$_id")"
 	log_append "reopened $_id: $*"
 	echo "$_id: todo (reopened)"
 }
@@ -295,7 +444,7 @@ cmd_check() {
 	_problems=""
 	add_problem() { _problems="$_problems- $1
 "; }
-	_wip=$(cfg_get wip 1)
+	_wip=$(wip_limit)
 	_doing=0
 	for _id in $(task_ids); do
 		_st=$(task_field "$_id" 3)
@@ -359,6 +508,10 @@ done) cmd_done "$@" ;;
 reopen) cmd_reopen "$@" ;;
 log) cmd_log "$@" ;;
 status) cmd_status "$@" ;;
+parallel) cmd_parallel "$@" ;;
+board) cmd_board "$@" ;;
+where) cmd_where "$@" ;;
+plan-check) cmd_plan_check "$@" ;;
 check) cmd_check "$@" ;;
 close) cmd_close "$@" ;;
 -h | --help | help) usage ;;
