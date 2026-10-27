@@ -332,6 +332,134 @@ git -C "$R" switch -q -c feat/x
 run_branch "git commit -m x"
 check "branch: commit on a feature branch is allowed" 0
 
+# --- worktrees ----------------------------------------------------------------
+
+# make_worktree <name>: linked worktree of $R at $R/.claude/worktrees/<name>. Sets WT.
+make_worktree() {
+	WT="$R/.claude/worktrees/$1"
+	git -C "$R" worktree add -q -b "wt-$1" "$WT" HEAD
+}
+
+new_repo
+make_worktree w1
+write_cfg "quick=case \"\$(pwd)\" in *worktrees/w1) true ;; *) false ;; esac" "quick_ext=go"
+echo "package x" >"$WT/a.go"
+OUT=$(printf '{"cwd":"%s","tool_input":{"file_path":"%s"}}' "$WT" "$WT/a.go" | sh "$POST" 2>&1)
+RC=$?
+check "worktree: quick check finds the config in the main root and runs in the worktree" 0
+OUT=$(printf '{"cwd":"%s","tool_input":{"file_path":"%s"}}' "$R" "$WT/a.go" | sh "$POST" 2>&1)
+RC=$?
+check "worktree: quick check runs in the file's worktree even if cwd is the main root" 0
+echo "package x" >"$R/b.go"
+OUT=$(printf '{"cwd":"%s","tool_input":{"file_path":"%s"}}' "$R" "$R/b.go" | sh "$POST" 2>&1)
+RC=$?
+check "worktree: a file in the main checkout runs there (and fails this config)" 2 "quick check failed"
+
+new_repo
+make_worktree w1
+write_cfg "verify=false"
+echo change >>"$WT/base.txt"
+OUT=$(printf '{"cwd":"%s"}' "$WT" | sh "$STOP" 2>&1)
+RC=$?
+check "worktree: stop verify sees the dirty worktree and the main config" 2 "t4l verify failed"
+new_repo
+make_worktree w1
+write_cfg "verify=false"
+OUT=$(printf '{"cwd":"%s"}' "$R" | sh "$STOP" 2>&1)
+RC=$?
+check "worktree: .claude/worktrees alone does not make the main tree dirty" 0
+
+new_repo
+make_worktree w1
+printf 'feature=f\nmode=tdd\ngate=none\nphase=implementing\n' >"$R/.t4l/state"
+OUT=$(printf '{"cwd":"%s","tool_input":{"file_path":"%s"}}' "$WT" "$WT/a.go" | sh "$GUARD" 2>&1)
+RC=$?
+check "worktree: the guard finds the state from inside a worktree (lead blocked)" 2 "t4l:implementer"
+
+# --- guard: parallel mode and task scope -------------------------------------
+
+# run_guard_at <cwd> <file> <agent_type>
+run_guard_at() {
+	OUT=$(printf '{"cwd":"%s","agent_type":"%s","agent_id":"a1","tool_input":{"file_path":"%s"}}' "$1" "$3" "$2" | sh "$GUARD" 2>&1)
+	RC=$?
+}
+
+register() { # task worktree files
+	mkdir -p "$R/.t4l/board"
+	printf 'task=%s\nworktree=%s\nbranch=b\nbase=x\nfiles=%s\n' "$1" "$2" "$3" >"$R/.t4l/board/$1.env"
+}
+
+new_repo
+write_state approved implementing
+make_worktree a
+run_guard_at "$R" "$R/src/a.go" "t4l:implementer"
+check "scope: sequential mode lets the implementer edit the main checkout" 0
+printf 'parallel=1\n' >>"$R/.t4l/state"
+run_guard_at "$R" "$R/src/a.go" "t4l:implementer"
+check "scope: parallel mode forbids implementers in the main checkout" 2 "isolated worktree"
+run_guard_at "$WT" "$WT/src/a.go" "t4l:implementer"
+check "scope: an unregistered worktree cannot write" 2 "has no task"
+register T1 "$WT" "internal/slug/**,cmd/main.go"
+run_guard_at "$WT" "$WT/internal/slug/slug.go" "t4l:implementer"
+check "scope: a file matching a glob is allowed" 0
+run_guard_at "$WT" "$WT/internal/slug/deep/x.go" "t4l:implementer"
+check "scope: ** matches nested paths" 0
+run_guard_at "$WT" "$WT/cmd/main.go" "t4l:implementer"
+check "scope: an exact file in Files is allowed" 0
+run_guard_at "$WT" "$WT/web/page.go" "t4l:implementer"
+check "scope: a file outside Files is denied" 2 "outside the files of T1"
+make_worktree b
+register T2 "$WT" "web/**"
+run_guard_at "$R/.claude/worktrees/a" "$R/.claude/worktrees/a/web/page.go" "t4l:implementer"
+check "scope: the denial names the task that owns the path" 2 "It belongs to T2"
+run_guard_at "$R/.claude/worktrees/a" "$R/.claude/worktrees/a/internal/slug/new_dir/x.go" "t4l:implementer"
+check "scope: a new directory inside the scope is allowed" 0
+register T1 "$R/.claude/worktrees/a" "-"
+run_guard_at "$R/.claude/worktrees/a" "$R/.claude/worktrees/a/anything.go" "t4l:implementer"
+check "scope: undeclared Files (-) allow everything" 0
+run_guard_at "$R/.claude/worktrees/a" "$R/.claude/worktrees/a/anything.go" "general-purpose"
+check "scope: other agent types keep the v0.3 behavior" 0
+
+# Regression: Files globs must not be expanded against the filesystem. When the
+# directory already has files, an unquoted glob becomes the name of one of them.
+new_repo
+write_state approved implementing
+printf 'parallel=1\n' >>"$R/.t4l/state"
+make_worktree c
+mkdir -p "$WT/internal/slug"
+echo "package slug" >"$WT/internal/slug/slug.go"
+register T1 "$WT" "internal/slug/**"
+run_guard_at "$WT" "$WT/internal/slug/truncate_test.go" "t4l:implementer"
+check "scope: a new file next to existing ones is allowed (no glob expansion)" 0
+(cd "$WT" && printf '{"cwd":"%s","agent_type":"t4l:implementer","agent_id":"a1","tool_input":{"file_path":"%s"}}' "$WT" "$WT/internal/slug/new.go" | sh "$GUARD" >/dev/null 2>&1)
+RC=$?
+OUT=""
+check "scope: same, with the hook running inside the worktree" 0
+make_worktree d
+mkdir -p "$WT/web"
+echo x >"$WT/web/page.go"
+register T2 "$WT" "web/**"
+run_guard_at "$R/.claude/worktrees/c" "$R/.claude/worktrees/c/web/other.go" "t4l:implementer"
+check "scope: owner lookup also avoids glob expansion" 2 "It belongs to T2"
+
+new_repo
+write_state approved implementing
+make_worktree e
+register T1 "$WT" "src/**"
+run_guard_at "$WT" "$WT/.t4l/reports/impl_f_T1.md" "t4l:implementer"
+check "reports: writing .t4l/ inside a worktree is refused with the right path" 2 "$R/.t4l/"
+run_guard_at "$WT" "$R/.t4l/reports/impl_f_T1.md" "t4l:implementer"
+check "reports: the implementer can write its report in the main checkout" 0
+
+new_repo
+write_state approved implementing
+run_guard_at "$R" "$R/.t4l/reports/workflow_f.md" "t4l:workflow-master"
+check "workflow-master: can write reports" 0
+run_guard_at "$R" "$R/src/a.go" "t4l:workflow-master"
+check "workflow-master: cannot edit project files" 2 "does not edit project files"
+run_guard_at "$R" "$R/.t4l/worktrees/integration/src/a.go" "t4l:workflow-master"
+check "workflow-master: can resolve conflicts in the integration worktree" 0
+
 # --- t4l-init --------------------------------------------------------------
 
 # shellcheck disable=SC2120

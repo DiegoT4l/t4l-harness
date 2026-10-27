@@ -16,7 +16,7 @@
 t4l_read_input
 cwd=$(t4l_json '.cwd' cwd)
 [ -n "$cwd" ] || cwd=$PWD
-root=$(t4l_repo_root "$cwd") || exit 0
+root=$(t4l_main_root "$cwd") || exit 0
 state="$root/.t4l/state"
 [ -f "$state" ] || exit 0
 
@@ -37,7 +37,37 @@ case $abs in
 *) exit 0 ;;
 esac
 
+# State and reports live in the main checkout, never in a worktree's own .t4l/.
+case $abs in
+"$root"/.t4l/*) ;;
+*/.t4l/*)
+	echo "t4l guard: .t4l/ files live in the main checkout, not inside a worktree. Write to $root/.t4l/${abs#*/.t4l/} instead (t4l-task.sh where prints the paths)." >&2
+	exit 2
+	;;
+esac
+
 agent_type=$(t4l_json '.agent_type' agent_type)
+
+# matches_files <path> <comma-separated globs>: 0 when the path matches a glob.
+# The globs are patterns: they must never be expanded against the filesystem,
+# or a glob like dir/** turns into the name of a file that already exists there.
+matches_files() {
+	_mf_ifs=$IFS
+	IFS=','
+	set -f
+	for _mf_g in $2; do
+		# shellcheck disable=SC2254  # the glob is meant to be a pattern
+		case $1 in $_mf_g)
+			set +f
+			IFS=$_mf_ifs
+			return 0
+			;;
+		esac
+	done
+	set +f
+	IFS=$_mf_ifs
+	return 1
+}
 
 # Read-only roles may only write their reports.
 case $agent_type in
@@ -70,6 +100,59 @@ if [ "$phase" = implementing ] && [ -z "$agent_type" ]; then
 		echo "To bypass deliberately, set T4L_GUARD=off."
 	} >&2
 	exit 2
+fi
+
+if [ "$phase" = implementing ] && [ -n "$agent_type" ]; then
+	deny() {
+		{
+			echo "t4l guard: $1"
+			echo "${2:-}"
+		} >&2
+		exit 2
+	}
+	case $agent_type in
+	t4l:workflow-master)
+		case $abs in
+		"$root"/.t4l/worktrees/integration/*) exit 0 ;;
+		esac
+		deny "the workflow-master does not edit project files." "It writes reports under .t4l/ and resolves conflicts only inside .t4l/worktrees/integration/. Delegate code changes to t4l:implementer."
+		;;
+	t4l:implementer)
+		work=$(t4l_repo_root "$(t4l_existing_dir "$(dirname "$abs")")") || exit 0
+		if [ "$work" = "$root" ]; then
+			if [ "$(state_get parallel)" = 1 ]; then
+				deny "parallel mode is on, so implementers must work in an isolated worktree, not in the main checkout." "Launch the implementer with isolation: worktree."
+			fi
+			exit 0
+		fi
+		task=""
+		files=""
+		for envf in "$root"/.t4l/board/*.env; do
+			[ -f "$envf" ] || continue
+			[ "$(sed -n 's/^worktree=//p' "$envf")" = "$work" ] || continue
+			task=$(sed -n 's/^task=//p' "$envf")
+			files=$(sed -n 's/^files=//p' "$envf")
+		done
+		if [ -z "$task" ]; then
+			deny "this worktree has no task. Run: t4l-task.sh start <TASK> from inside it before editing." "Worktree: $work"
+		fi
+		if [ -z "$files" ] || [ "$files" = "-" ]; then
+			exit 0
+		fi
+		rel=${abs#"$work"/}
+		matches_files "$rel" "$files" && exit 0
+		owner=""
+		for envf in "$root"/.t4l/board/*.env; do
+			[ -f "$envf" ] || continue
+			ot=$(sed -n 's/^task=//p' "$envf")
+			[ "$ot" = "$task" ] && continue
+			matches_files "$rel" "$(sed -n 's/^files=//p' "$envf")" && owner="$ot"
+		done
+		msg="$rel is outside the files of $task ($files)."
+		[ -n "$owner" ] && msg="$msg It belongs to $owner."
+		deny "$msg" "Do not edit it. Report the file and why you need it; the lead or the workflow-master can amend Files in the feature document."
+		;;
+	esac
 fi
 
 exit 0
