@@ -265,7 +265,7 @@ Plugin de Claude Code `t4l` (carpeta `plugin/` con `.claude-plugin/plugin.json`,
   - v0.5: checkpoints y journeys (sección 13).
   - v0.5.1: `pickup`. Los dos journeys pasaron sin playbook, así que no se escribió (sección 13). Quedan como guardas de regresión.
   - v0.5.2: mutación opcional (hecha, sección 13). Go con `gremlins`; TS solo como comando configurable.
-  - v0.5.3: playbooks `perf` y `babysit`.
+  - v0.5.3: `perf` se ganó su playbook; `babysit`, no (sección 13).
 - **v1.0 — Plugin.** Empaquetado, `t4l:setup`, marketplace propio, documentación.
 
 ## 10. `workflow-master` (v0.4)
@@ -362,7 +362,7 @@ Sin `--base` se omiten los dos primeros. "Sin código que ningún test pidió" n
 
 ### Journeys (`journeys/*.journey`, `scripts/t4l-journey.sh`)
 
-- **Formato:** un archivo de shell por journey, con la descripción en la primera línea de comentario, `fixture=` y una o más llamadas `turn '<prompt>'`. Opcionalmente, `setup()` (por ejemplo, para crear `.t4l/config`) y `allow=` con herramientas extra, una por línea. `checkpoints()` usa los helpers del runner: `reply_has`, `reply_lacks`, `transcript_has`, `tool_used`, `tool_unused`, `changed`, `only_changed`, `clean`, `exists`, `absent`, `cmd` y `generic` (los checkpoints genéricos contra el commit del fixture).
+- **Formato:** un archivo de shell por journey, con la descripción en la primera línea de comentario, `fixture=` y una o más llamadas `turn '<prompt>'`. Opcionalmente, `setup()` y `allow=` con herramientas extra, una por línea. `setup()` puede crear historia (commits, ramas) y poner herramientas falsas en `$BIN`, que va primero en el `PATH` de la sesión (así se simula `gh`). Los estados compartidos viven en `journeys/states/`. La sesión se juzga contra el estado que dejó `setup()`. `checkpoints()` usa los helpers del runner: `reply_has`, `reply_lacks`, `transcript_has`, `transcript_order`, `tool_used`, `tool_unused`, `changed`, `only_changed`, `clean`, `exists`, `absent`, `cmd` y `generic`. `generic` corre los checkpoints genéricos con `--refs`, la foto de las ramas tras `setup()`, y siempre usa el script del runner, no el del plugin bajo prueba, para que una versión vieja se juzgue con las mismas reglas.
 - **Fixture:** `journeys/fixtures/slug` es la copia limpia del sandbox (`0feb053`), versionada para que los journeys no dependan de `~/t4l-sandbox`. Cada ejecución la copia a un directorio temporal y hace `git init`.
 - **Sesión:** `claude -p --plugin-dir <harness> --output-format stream-json`, el prompt por stdin y los turnos siguientes con `--resume`. Permisos: `acceptEdits` y una lista de herramientas permitidas (Go, git, scripts de t4l y comandos de lectura). Lo denegado queda en `denials.txt` y en el resumen: un journey con denegaciones se lee antes de dar por bueno su resultado. Límite de gasto por sesión (`--budget`, 3 USD) y de tiempo (`--timeout`, 1200 s).
 - **Engram apagado por defecto** (`--settings`): las corridas de medición no escriben en la memoria del usuario. El resto del entorno (plugins, hooks globales, `block-ai-attribution`) es el real, porque es el que se mide.
@@ -389,3 +389,17 @@ El kernel (la prueba de reanudación y la ubicación de `.t4l/`) y el playbook `
 - **Quién lo usa:** el `judge`, paso 7, sobre el árbol revisado (`TREE`). Cada `LIVED` o `NOT COVERED` es un test que falta, aunque la nota supere el umbral, salvo un mutante equivalente justificado en el informe. La nota bajo el umbral es un rechazo.
 - **Instalación:** `go install github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0`.
 - **Prueba real** (journey `judge-mutation`): T1 y T2 de `max-len` en `review`, con la mutación activa. La nota fue 88 % (pasa el 80 %), pero `slug.go:23` (`<=` → `<`) sobrevivió. El `judge` corrió el script, mostró que el mutante no es equivalente (`Truncate("hello-", 6)` da `"hello-"` y, con el mutante, `"hello"`) y pidió el test como cambio requerido, con `CHANGES_REQUESTED`. Costo: 0,73 USD, 106 s.
+
+### `perf` y `babysit` (v0.5.3)
+
+**`perf` se ganó su playbook.** El journey `perf` parte de un `slug.Make` cuadrático (`out += string(r)`) y pide hacerlo rápido sin cambiar la salida. Exige medir antes de editar (`transcript_order`), números con unidades, una explicación (cuadrático, asignaciones), la salida intacta y 1 MB en menos de un segundo. Tres corridas por versión (A/B con `--plugin-dir` hacia un worktree de la versión anterior):
+
+| | Sin playbook | Con `perf.md` |
+|---|---|---|
+| Journey completo | 0/3 | 2/3 |
+| Midió el código viejo | 2/3: una afirmó "instead of minutes" sin medir | 3/3 |
+| Midió antes de editar | 0/3: editó primero y midió lo viejo con `git stash` o con una copia | 2/3 |
+
+El playbook (`skills/t4l/playbooks/perf.md`) pide medir la línea base antes de tocar el código, explicar el número (complejidad, asignaciones, perfil), cambiar una sola cosa, volver a medir con el mismo arnés y conservar el benchmark. La corrida que falló con el playbook editó primero y midió lo viejo con una copia en un test: el número existe, pero el orden no se cumplió. Es una regla en prosa, no un hook; si vuelve a fallar en próximas mediciones, el candidato es un hook.
+
+**`babysit` no se ganó su playbook.** El journey `babysit` simula el PR #12 con un `gh` falso: conflicto con `main` en el README, CI rojo por `go vet` y una review que pide un arreglo en `Truncate`. Prohíbe hacer push y publicar en GitHub. Sin playbook pasó a la primera: leyó el PR, la review y el log de CI; fusionó `main` conservando las dos líneas; corrigió el verbo de formato; atendió la review con TDD (dos tests en RED antes del arreglo); hizo la regresión, y no publicó nada. Queda como guarda, igual que `pickup`.
