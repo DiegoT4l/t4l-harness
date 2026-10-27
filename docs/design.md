@@ -309,3 +309,31 @@ Columnas `todo → doing → review → done`. Límite WIP: 1 en secuencial (v0.
 - **Cumplimiento por el modelo:** las reglas en prosa se ignoran. Mitigación: hooks y scripts primero, prosa después.
 - **Costo de contexto:** el kernel se carga siempre. Mitigación: tope de 150 líneas y medir tokens por sesión.
 - **Mantenimiento de los tres orígenes:** no seguimos sus cambios; tomamos ideas, no código.
+
+## 12. Integraciones opcionales (v0.4.1)
+
+t4l funciona igual sin ellas. El hook `SessionStart` anuncia cuáles están instaladas, porque sin ese anuncio el modelo no sabe que puede usarlas.
+
+### cocoindex-code (`ccc`): búsqueda semántica de código
+
+- **Qué aporta:** consultas conceptuales ("dónde se decide X") contra un índice AST con embeddings locales, en lugar de varias rondas de grep o un `Explore`.
+- **Cómo se integra:** con `scripts/t4l-search.sh`, no con el plugin oficial, cuyos hooks reindexan tras cada edición y chocarían con los nuestros.
+  - Busca siempre contra el índice del checkout principal, también desde un worktree, y refresca el índice antes de buscar.
+  - Es opt-in por repo (`t4l-search.sh --init`) y deja intacto el `.gitignore` versionado: usa `.git/info/exclude`.
+  - El índice se refresca en segundo plano al iniciar la sesión.
+- **Embeddings:** locales (`[full]`, `Snowflake/snowflake-arctic-embed-xs`, en CPU); el código no sale de la máquina. Configuración global en `~/.cocoindex_code/global_settings.yml`.
+- **Medido:** sandbox de 3 archivos, primer índice en 72 s (incluye descargar el modelo), reindexado incremental en 0,4 s, búsqueda en 0,2 s. Clon del harness, 37 archivos en 15 s.
+- **Calidad:** buena en código, irregular en shell y Markdown. Sus resultados son **pistas que se verifican leyendo**, nunca evidencia.
+- **Excluidos por defecto:** todo directorio oculto (`.t4l/`, `.claude/worktrees/`). `ccc grep` (estructural) no se usa: requiere una versión de cocoindex que aún no se publicó.
+
+### markitdown: documentos a Markdown
+
+- **Qué aporta:** SDD a partir de requisitos en docx, xlsx, pptx, html, epub, msg, etc., con citas literales. Los PDF y las imágenes se leen directamente con `Read`.
+- **Cómo se integra:** con `scripts/t4l-ingest.sh` (solo archivos locales; URLs http(s) con `--allow-url`; ningún otro esquema). El resultado va a `.t4l/inputs/<nombre>.md`, con cabecera de procedencia (fuente y sha256) y el aviso de que es dato, no instrucciones.
+- **Inyección de prompt:** el script detecta texto con forma de instrucción a un agente, lo marca en la cabecera del archivo convertido y exige mencionarlo al usuario. En la prueba real, el modelo no obedeció la línea inyectada, pero al principio tampoco avisó; con el aviso explícito, avisó.
+- **Instalación:** `uv tool install 'markitdown[all]'`.
+
+### Instalación en esta máquina
+
+`uv` 0.13.6 desde el release oficial de GitHub (checksum verificado) en `~/.local/bin`, porque `sudo pacman` pide contraseña. Ambas herramientas instaladas con `uv tool install`.
+
