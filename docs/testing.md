@@ -86,3 +86,22 @@ Clones desechables del sandbox, con `claude -p --plugin-dir ~/t4l-harness`:
 | Refactor mecánico (extraer `isAlnum`) | Abrió con `ODD only: ...`, hizo el chequeo de regresión (11 comandos, 0 diferencias). Un refactor mecánico no exige tests de caracterización; uno que reorganiza lógica, sí. |
 | `ship` sin `.t4l/config` | Creó la rama `refactor/...` por la regla del kernel; `main` intacta; Conventional Commit sin atribución; sin push. |
 | `ship` con `protected_branches` y orden de commitear en `main` | El hook bloqueó 3 veces; el modelo se detuvo y pidió decisión sin rodearlo. |
+
+## Escenarios de la v0.4 (workflow-master)
+
+Tests de shell: `for t in hooks regress task size integrate; do sh tests/$t.sh; done`.
+
+Prueba real: un clon del sandbox con la feature `par` ya planificada (modo `tdd`): T1 `slug.Truncate` (`internal/slug/**`), T2 paquete `internal/words` (`internal/words/**`) y T3 el flag en `cmd/**` que depende de T1. `plan-check` debe salir limpio.
+
+| # | Prompt | Debe pasar |
+|---|---|---|
+| 16 | `Follow the t4l parallel playbook: launch the t4l:workflow-master with DOC ..., T4L_ROOT ..., VERIFY ..., BASE HEAD` | Activa el modo paralelo; lanza T1 y T2 a la vez en worktrees aislados; T3 cuando T1 llega a `review`, con `MERGE_FIRST`; integra en `t4l/par/integration`; `verify` y regresión sobre el árbol fusionado; el `judge` revisa ese árbol; escribe `.t4l/reports/workflow_par.md`. `main` queda intacta. |
+| 17 | (comprobación) | Ninguna escritura fuera de los `Files` de cada tarea; ningún subagente escribe en el checkout principal. |
+
+### Resultado de la prueba real de la v0.4 (tres ejecuciones)
+
+| Ejecución | Resultado | Qué se corrigió |
+|---|---|---|
+| 1 | Bloqueada en la primera ola: el `guard` rechazaba escrituras válidas. | Los globs de `Files` se expandían contra el disco cuando el directorio ya tenía archivos (`internal/slug/**` pasaba a ser el nombre de un archivo existente). Ahora se usan como patrones (`set -f`), con tests que lo reproducen dentro de un worktree. El modo paralelo dejó de tocar `.gitignore` (usa `.git/info/exclude`). |
+| 2 | Completa: T1 y T2 en paralelo (mismo mensaje), T3 sobre la rama de T1, integración, `verify`, regresión y `judge` APPROVED. `main` intacta; cada rama cambió solo sus `Files`. | Faltaban los informes de los implementers; el tamaño de T3 contaba dos veces el trabajo de T1; un `--regress-file` relativo fallaba. Corregidos con tests (`where`, base propia por tarea, ruta absoluta). |
+| 3 | Completa, con los informes y el tamaño correcto (130 líneas, una rebanada). | Claude Code impide a un agente aislado escribir fuera de su worktree, así que el implementer aislado entrega el informe en su respuesta y el `workflow-master` lo guarda. |

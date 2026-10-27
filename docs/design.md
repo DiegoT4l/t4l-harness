@@ -267,22 +267,41 @@ Plugin de Claude Code `t4l` (carpeta `plugin/` con `.claude-plugin/plugin.json`,
 
 **Propósito acotado:** que varios subagentes trabajen a la vez sin pisarse, que ninguno se salga de su alcance y que las rebanadas de PR no crezcan sin control. No es Scrum: no hay sprints, dailies ni estimaciones. Es un tablero Kanban y tres contratos que se hacen cumplir con scripts y hooks.
 
+### Hallazgos de la prueba técnica
+
+- `isolation: worktree` de la herramienta `Agent` crea el worktree en `<repo>/.claude/worktrees/agent-<id>`, con rama `worktree-agent-<id>`. El `cwd` que ven los hooks es ese worktree y las rutas de `Edit`/`Write` son absolutas dentro de él. El worktree y la rama siguen ahí al terminar si hubo cambios.
+- Los nombres no dicen a qué tarea pertenecen, así que la tarea se registra al reclamarla.
+- **Fallo latente de la v0.3:** dentro de un worktree, `git rev-parse --show-toplevel` devuelve el worktree, que no contiene `.t4l/`. El `guard` y los hooks de verificación no encontraban `.t4l/state` y no hacían nada. Todo lo que lee estado o configuración debe usar la raíz del checkout principal (`--git-common-dir`); lo que ejecuta comandos usa la raíz del worktree del archivo editado.
+- Tras usar worktrees, `.claude/` aparece como no rastreado en el repo principal; `stop-verify` lo excluye.
+
+### Contratos
+
 | Problema | Contrato | Cómo se hace cumplir |
 |---|---|---|
-| Se pisan entre sí | Cada tarea declara `Files:` (globs) y `Deps:`. Dos tareas con globs que se solapan no pueden estar en `doing` a la vez. Los archivos compartidos (`go.mod`, `package.json`, lockfiles) se serializan: una sola tarea los toca. | `t4l-task.sh start` rechaza el solape. Cada tarea trabaja en su propio worktree. |
-| Se salen del alcance | El agente solo escribe dentro de los `Files:` de su tarea. | El hook `guard` identifica el worktree de la tarea y deniega escrituras fuera de sus globs con un mensaje que nombra a la tarea dueña y dice a quién pedir una ampliación. |
-| PRs demasiado largos | Presupuesto por rebanada (`slice_budget`, ~400 líneas de cambio propio, sin generados ni lockfiles). | `t4l-size.sh` mide la rama contra su base. Un hook avisa al 80 % y el `workflow-master` propone dividir en una pila de PRs al superar el presupuesto. Es una advertencia, no un tope duro. |
-| La integración falla aunque cada rebanada pase | Se integra en una rama aparte. | `t4l-integrate.sh` fusiona en orden de dependencias, ejecuta `verify` y `t4l-regress.sh` sobre el resultado fusionado contra la base, y el `judge` revisa el diff integrado. |
+| Se pisan entre sí | Cada tarea declara `Files:` (globs) y `Deps:`. En modo paralelo `Files` es obligatorio y dos tareas en `doing` no pueden tener globs que se solapen. Dos globs se solapan si el prefijo estático de uno (hasta el primer `*`, `?` o `[`) es prefijo del otro; es una aproximación conservadora. Los archivos compartidos (`go.mod`, `package.json`, lockfiles) los declara una sola tarea. | `t4l-task.sh start` rechaza el solape y los `Files` vacíos. Cada tarea trabaja en su propio worktree. |
+| Se salen del alcance | El agente solo escribe dentro de los `Files` de su tarea. | El hook `guard` mapea el worktree del archivo a su tarea (registro `.t4l/board/<TASK>.env`, escrito por `start`) y deniega fuera de los globs, nombrando a la tarea dueña de esa ruta. Un worktree sin tarea reclamada no puede escribir. |
+| PRs demasiado largos | Presupuesto por rebanada (`slice_budget`, por defecto 400 líneas de cambio propio, sin generados ni lockfiles). | `t4l-size.sh` mide una rama contra su base. Un aviso al 80 % (una vez por tarea) y, al superar el presupuesto, el `workflow-master` propone cómo dividir. Es una advertencia, no un tope. |
+| La integración falla aunque cada rebanada pase | Se integra en una rama aparte, nunca en `main`. | `t4l-integrate.sh` fusiona las ramas de las tareas en orden de dependencias en un worktree de integración, ejecuta `verify` y `t4l-regress.sh` sobre el resultado fusionado, y mide el tamaño por tarea. El `judge` revisa el árbol integrado. |
 
-**Tablero:** columnas `todo → doing → review → done`, con límite WIP por defecto 2 (`wip=` en `.t4l/config`). Se tira de `todo` solo si hay hueco y las dependencias están en `done`.
+### Tablero y modo paralelo
 
-**Reparto de trabajo:** los scripts hacen lo mecánico (solapes, límites, worktrees, orden de merge, medición); el agente decide el grafo de tareas, qué es realmente disjunto, cómo resolver un conflicto y escribe el informe en `.t4l/reports/`.
+Columnas `todo → doing → review → done`. Límite WIP: 1 en secuencial (v0.3) y 2 en modo paralelo (`wip=` en `.t4l/config`). El modo paralelo lo activa el `workflow-master` con `parallel=1` en `.t4l/state`; con él, un subagente no puede escribir en el checkout principal. `t4l-task.sh board` muestra el tablero con dueños y límites.
 
-**Límites de autoridad:** no escribe código de producto, no aprueba specs, no hace merge a `main` ni push.
+### El agente
 
-**Reutiliza lo que existe:** `isolation: worktree` de la herramienta `Agent` para los subagentes de Claude, y `pi-workers` para el trabajo mecánico masivo.
+`t4l:workflow-master` (Sonnet) lo lanza el lead cuando hay dos o más tareas con `Files` disjuntos, o a petición. Puede lanzar `t4l:implementer` en paralelo, cada uno con `isolation: worktree` (comprobado: un subagente puede lanzar otros).
 
-**Comprobado:** un subagente puede lanzar otros subagentes (prueba con un agente coordinador y los transcripts), y los hooks reciben `agent_id` y `agent_type` de cada llamada, vacíos para el lead.
+1. Valida el plan: `t4l-task.sh plan-check` lista solapes y archivos compartidos.
+2. Tira tareas de `todo` mientras haya hueco WIP y sus dependencias estén en `review` o `done`.
+3. Vigila los informes, no los transcripts; al llegar a `review`, mide el tamaño.
+4. Integra con `t4l-integrate.sh`; resuelve solo conflictos triviales dentro del worktree de integración y escala el resto.
+5. Lanza al `judge` sobre el árbol integrado (`TREE`) y escribe `.t4l/reports/workflow_<feature>.md`.
+
+**Límites de autoridad:** no escribe código de producto (solo `.t4l/` y el worktree de integración), no aprueba specs, no hace merge a `main` ni push. El merge a `main` y el push son del usuario.
+
+**Decisión a vigilar:** en modo paralelo hay commits internos. Cada implementer confirma en su propia rama de tarea (`COMMIT: yes` solo vale para esa rama), `t4l-integrate.sh` hace un commit de instantánea si queda trabajo sin confirmar y crea la rama `t4l/<feature>/integration` con commits de merge. Nada llega a `main` ni a un remoto; son ramas locales desechables. Las tareas dependientes construyen sobre el trabajo de sus dependencias: el implementer fusiona primero sus ramas (`MERGE_FIRST`) y solo entonces hace `start`, para que el tamaño de su rebanada excluya lo ajeno.
+
+**Reutiliza lo que existe:** `isolation: worktree` para los subagentes de Claude y `pi-workers` para el trabajo mecánico masivo.
 
 ## 11. Riesgos
 
