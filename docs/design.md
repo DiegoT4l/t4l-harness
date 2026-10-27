@@ -263,7 +263,7 @@ Plugin de Claude Code `t4l` (carpeta `plugin/` con `.claude-plugin/plugin.json`,
 - **v0.4 — `workflow-master` (hecha).** Ver la sección 10. v0.4.1: integraciones opcionales (sección 12).
 - **v0.5 — Medición (en curso).** Por orden, cada parte con su commit y su prueba real:
   - v0.5: checkpoints y journeys (sección 13).
-  - v0.5.1: playbook `pickup`, con un journey que falle sin él.
+  - v0.5.1: `pickup`. Los dos journeys pasaron sin playbook, así que no se escribió (sección 13). Quedan como guardas de regresión.
   - v0.5.2: mutación opcional, Go con `gremlins`; TS solo como comando configurable.
   - v0.5.3: playbooks `perf` y `babysit`.
 - **v1.0 — Plugin.** Empaquetado, `t4l:setup`, marketplace propio, documentación.
@@ -368,3 +368,14 @@ Sin `--base` se omiten los dos primeros. "Sin código que ningún test pidió" n
 - **Engram apagado por defecto** (`--settings`): las corridas de medición no escriben en la memoria del usuario. El resto del entorno (plugins, hooks globales, `block-ai-attribution`) es el real, porque es el que se mide.
 - **Resultados:** `.t4l/journeys/<fecha>-<rev>/`, con `summary.tsv` (resultado, checkpoints, costo, turnos, segundos, denegaciones) y, por ejecución, el transcript, las respuestas, las herramientas usadas y los checkpoints. `--repeat N` da tasas de acierto; `--compare A B` compara dos directorios por journey. Para medir otra versión, `--plugin-dir` apunta a un worktree de esa versión.
 - **Los journeys no corren en los tests de shell:** gastan tokens. `tests/journey.sh` prueba el runner con un `claude` falso.
+
+### `pickup`: no se ganó su lugar (v0.5.1)
+
+La regla de la sección 11 dice que cada playbook nuevo debe tener un journey que falle sin él. Se escribieron dos y se corrieron contra el harness sin playbook `pickup` (v0.5.0):
+
+| Journey | Situación | Resultado sin playbook |
+|---|---|---|
+| `pickup` | T1 hecha; T2 en `doing` con el test en RED sin confirmar; el README editado fuera de los `Files` de toda tarea | Pasa. Leyó el documento y `.t4l/state`, ejecutó los tests, informó del RED esperado, señaló la deriva del README y propuso delegar T2 al `implementer`. |
+| `pickup-stale` | El documento dice que T2 está en `doing`, pero T2 ya está confirmada y en verde | Pasa. Detectó que el documento iba por detrás de git, propuso pasar T2 a `review` y luego la regresión y el `judge`, sin rehacer T2. |
+
+El kernel (la prueba de reanudación y la ubicación de `.t4l/`) y el playbook `feature` bastan. No se añade el playbook ni el recordatorio en `SessionStart`: costarían contexto en cada sesión sin una falla que corregir. Los dos journeys quedan como guardas: si una versión futura los rompe, ahí sí se justifica.
