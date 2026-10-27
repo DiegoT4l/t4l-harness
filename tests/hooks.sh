@@ -498,7 +498,7 @@ OUT=$(init_in)
 RC=$?
 CFG=$(cat "$R/.t4l/config")
 case $CFG in
-*"quick=go vet ./{dir} && go test ./{dir}"*"verify=go vet ./... && go test ./..."*) RC2=0 ;;
+*"quick=go vet ./{dir} && go test ./{dir}"*"verify=go vet ./... && go test ./..."*"mutation="*"mutation_threshold=80"*) RC2=0 ;;
 *) RC2=1 ;;
 esac
 RC=$((RC + RC2))

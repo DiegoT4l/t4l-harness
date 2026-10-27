@@ -82,6 +82,11 @@ mkdir -p "$root/.t4l"
 	echo "verify_timeout=300"
 	echo "# Commits on these branches are blocked until you create a branch (empty = off):"
 	echo "protected_branches=main,master"
+	echo "# Mutation testing of the changed code, run by the judge. Empty = off."
+	echo "# Go: mutation=gremlins (go install github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0)."
+	echo "# Other stacks: a command whose exit status is the verdict (for example npx stryker run)."
+	echo "mutation="
+	echo "mutation_threshold=80"
 	echo "# Set to 1 to turn the hooks off for this repo:"
 	echo "disable=0"
 } >"$cfg"
@@ -99,6 +104,9 @@ if command -v ccc >/dev/null 2>&1; then
 	else
 		echo "t4l-init: ccc is installed; enable semantic code search here with: sh $(cd "$(dirname "$0")" && pwd)/t4l-search.sh --init"
 	fi
+fi
+if [ -f "$root/go.mod" ] && command -v gremlins >/dev/null 2>&1; then
+	echo "t4l-init: gremlins is installed; set mutation=gremlins in $cfg to mutation-test changed code"
 fi
 command -v markitdown >/dev/null 2>&1 && echo "t4l-init: markitdown is installed (t4l-ingest.sh converts documents)"
 cat "$cfg"

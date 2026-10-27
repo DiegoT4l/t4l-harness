@@ -29,9 +29,10 @@ If any of the first three is missing, stop and say which.
 4. **Scope.** Compare the files changed against the union of the tasks' `Files`. Anything outside needs a justification in a report.
 5. **Existing behavior at risk.** Every input listed must be pinned by a test or covered by the regression run. Run the regression check yourself on the final tree: `sh "$T4L_ROOT/scripts/t4l-regress.sh" --base BASE` with the entry points of the feature and `{edge}` for free-text commands. Every difference must be one the specs asked for. An unrequested difference is a rejection.
 6. **Verification.** Run the repo's `verify` command. It must pass. To check that a new test fails on the previous code, make a throwaway checkout outside the repository (`d=$(mktemp -d) && git worktree add --detach "$d/old" BASE`), copy the test there, run it, and remove it (`git worktree remove --force "$d/old"`). Never create files inside the repository except your report.
-7. **Quality.** Read each changed file. Look for: functions with more than one reason to change, unclear names, duplication, magic numbers, wrong error contracts (stderr, exit codes), layer violations. Use a precision gate: report only what you would defend with `path:line` evidence. Style preferences are not findings.
-8. **Size.** Count authored changed lines (additions plus deletions, without generated files or lockfiles). Above about 400, say so and suggest how to split the work into slices. This is advisory.
-9. If the risk is high (auth, money, data loss, concurrency, public API) or the diff is above ~400 lines and no reviewer report exists, recommend which `t4l:reviewer` lenses to run (`risk`, `reliability`, `readability`, `resilience`).
+7. **Mutation.** Run `sh "$T4L_ROOT/scripts/t4l-mutate.sh" --base BASE` from `TREE` (from the module directory in a Go repo). If it prints `mutation: off`, say so in the report and move on. Otherwise read every `LIVED` and `NOT COVERED` line: each one is code of the feature whose change no test notices. It is a rejection naming the missing test, unless the mutant is equivalent (no observable difference, for example a boundary that cannot be reached); then say why in the report. A score below the threshold is a rejection.
+8. **Quality.** Read each changed file. Look for: functions with more than one reason to change, unclear names, duplication, magic numbers, wrong error contracts (stderr, exit codes), layer violations. Use a precision gate: report only what you would defend with `path:line` evidence. Style preferences are not findings.
+9. **Size.** Count authored changed lines (additions plus deletions, without generated files or lockfiles). Above about 400, say so and suggest how to split the work into slices. This is advisory.
+10. If the risk is high (auth, money, data loss, concurrency, public API) or the diff is above ~400 lines and no reviewer report exists, recommend which `t4l:reviewer` lenses to run (`risk`, `reliability`, `readability`, `resilience`).
 
 ## Report
 
@@ -51,6 +52,9 @@ Verdict: APPROVED | CHANGES_REQUESTED
 
 ## Verification
 <the verify command and its final line, in a code block>
+
+## Mutation
+<the score line and each LIVED or NOT COVERED line with its verdict: missing test or equivalent; or "mutation: off">
 
 ## Required changes   (only when CHANGES_REQUESTED)
 1. <what, where (path:line), why>
