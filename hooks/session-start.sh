@@ -1,6 +1,6 @@
 #!/bin/sh
 # SessionStart: tell the agent where the t4l plugin lives, which optional tools
-# are available, and inject the kernel, so the plugin works without copying
+# are available, whether a newer t4l release is out, and inject the kernel, so the plugin works without copying
 # rules/t4l.md into ~/.claude/rules.
 # The kernel body is skipped when that copy already exists (it would load twice)
 # or when T4L_KERNEL=off. The plugin root line is always printed.
@@ -30,6 +30,9 @@ fi
 if command -v markitdown >/dev/null 2>&1; then
 	echo "markitdown: installed. Convert documents the user gives you (docx, xlsx, pptx, html, epub...) with: sh $root/scripts/t4l-ingest.sh <file>"
 fi
+
+# one line when a newer release is cached; the fetch itself runs in the background
+sh "$root/scripts/t4l-version.sh" --notice 2>/dev/null
 
 [ "${T4L_KERNEL:-}" = off ] && exit 0
 

@@ -63,6 +63,8 @@ S "$NOREPO"
 check "git alone is enough" 0 "ok   git"
 check "missing jq is reported with its fallback" 0 "miss jq"
 check "outside a repository says so" 0 "not inside a git repository"
+check "reports the installed version" 0 "installed: "
+check "without curl the latest version cannot be checked" 0 "latest: could not check"
 
 stub jq timeout
 S "$NOREPO"
