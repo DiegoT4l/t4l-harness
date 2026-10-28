@@ -6,8 +6,6 @@
       "release-type": "simple",
       "package-name": "t4l",
       "changelog-path": "CHANGELOG.md",
-      "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": true,
       "extra-files": [
         {
           "type": "json",
