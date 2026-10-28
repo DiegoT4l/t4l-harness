@@ -52,6 +52,10 @@ jobs:
           set -eu
           jq -e '.name == "t4l" and (.version | test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))' .claude-plugin/plugin.json >/dev/null
           jq -e '.hooks' hooks/hooks.json >/dev/null
+          # one plugin at the repository root; its version lives only in plugin.json
+          jq -e '.name == "t4l-harness" and (.plugins | length == 1)
+            and (.plugins[0] | .name == "t4l" and .source == "./" and (has("version") | not))' \
+            .claude-plugin/marketplace.json >/dev/null
           plugin=$(jq -r .version .claude-plugin/plugin.json)
           manifest=$(jq -r '."."' .release-please-manifest.json)
           if [ "$plugin" != "$manifest" ]; then
@@ -65,7 +69,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [hooks, regress, task, size, integrate, integrations, journey, mutate, package]
+        suite: [hooks, regress, task, size, integrate, integrations, journey, mutate, package, setup]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -102,7 +106,7 @@ jobs:
           set -eu
           zip=$(sh scripts/t4l-package.sh)
           unzip -l "$zip"
-          for p in .claude-plugin/plugin.json rules/t4l.md skills/t4l/SKILL.md hooks/hooks.json scripts/t4l-task.sh; do
+          for p in .claude-plugin/plugin.json rules/t4l.md skills/t4l/SKILL.md skills/setup/SKILL.md hooks/hooks.json scripts/t4l-task.sh LICENSE; do
             unzip -l "$zip" "$p" >/dev/null || { echo "missing from the zip: $p" >&2; exit 1; }
           done
           if unzip -l "$zip" | grep -Eq ' (tests|journeys|docs)/'; then

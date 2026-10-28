@@ -266,7 +266,7 @@ Plugin de Claude Code `t4l` (carpeta `plugin/` con `.claude-plugin/plugin.json`,
   - v0.5.1: `pickup`. Los dos journeys pasaron sin playbook, así que no se escribió (sección 13). Quedan como guardas de regresión.
   - v0.5.2: mutación opcional (hecha, sección 13). Go con `gremlins`; TS solo como comando configurable.
   - v0.5.3: `perf` se ganó su playbook; `babysit`, no (sección 13).
-- **v1.0 — Plugin.** Empaquetado, `t4l:setup`, marketplace propio, documentación.
+- **v1.0 — Plugin (hecha).** Marketplace en este repositorio, `/t4l:setup`, documentación de instalación (sección 15).
 
 ## 10. `workflow-master` (v0.4)
 
@@ -408,7 +408,14 @@ El playbook (`skills/t4l/playbooks/perf.md`) pide medir la línea base antes de 
 
 - **Ramas:** `dev` es la rama por defecto e integra; las features llegan por PR a `dev`. `main` solo recibe PRs desde `dev` y es la que publica.
 - **CI** (`.github/workflows/ci.yml`), en PRs y pushes a `dev` y `main`: `lint` (shellcheck 0.11.0 y actionlint 1.7.12, descargados con checksum verificado; manifiestos coherentes), `test` (una suite por job, con Go y gremlins) y `package` (el zip del plugin y su contenido). Las actions van fijadas por SHA.
-- **Releases** con release-please (`.github/workflows/release.yml`): cada push a `main` actualiza un PR de release desde los Conventional Commits. Al mergearlo se crean el tag `vX.Y.Z` y el GitHub Release, y el job `publish` adjunta `t4l-<versión>.zip`, armado con `scripts/t4l-package.sh` desde el tag (solo lo que el plugin usa en tiempo de ejecución). Antes de 1.0, `feat` y `fix` suben el parche (como hasta ahora) y un cambio incompatible sube el minor; los hitos se fijan con `Release-As:`.
+- **Releases** con release-please (`.github/workflows/release.yml`): cada push a `main` actualiza un PR de release desde los Conventional Commits. Al mergearlo se crean el tag `vX.Y.Z` y el GitHub Release, y el job `publish` adjunta `t4l-<versión>.zip`, armado con `scripts/t4l-package.sh` desde el tag (solo lo que el plugin usa en tiempo de ejecución). Antes de 1.0, `feat` y `fix` subían el parche y un cambio incompatible el minor. Desde 1.0 rige semver: `fix` sube el parche, `feat` el minor y un cambio incompatible el major. Una versión concreta se fija con `Release-As:`.
 - **Punto de partida:** v0.5.3 se publicó a mano sobre el `main` de la v0.5 con el mismo script, para que release-please cuente desde ahí.
-- **Token de release:** los PRs que abre el `GITHUB_TOKEN` no disparan workflows, y el ruleset de `dev` y `main` exige PR y los 11 checks de CI. Por eso release-please usa el secret de Actions `RELEASE_PLEASE_TOKEN` (token fine-grained con Contents y Pull requests en escritura): así su PR de release corre CI como cualquier otro.
+- **Token de release:** los PRs que abre el `GITHUB_TOKEN` no disparan workflows, y el ruleset de `dev` y `main` exige PR y los checks de CI. Por eso release-please usa el secret de Actions `RELEASE_PLEASE_TOKEN` (token fine-grained con Contents y Pull requests en escritura): así su PR de release corre CI como cualquier otro.
 - **Ruleset `dev and main`:** sin borrar la rama, sin force push, PR obligatorio y los checks `lint`, `package` y `test (<suite>)` en verde.
+
+## 15. Plugin (v1.0)
+
+- **Marketplace en el mismo repositorio:** `.claude-plugin/marketplace.json` lista un solo plugin, `t4l`, con `source: "./"`. Se instala con `/plugin install t4l --marketplace DiegoT4l/t4l-harness`. La entrada no lleva versión: la única fuente es `plugin.json`, que mantiene release-please, así que no hay dos números que puedan divergir. La CI comprueba la forma del marketplace.
+- **El marketplace no viaja en el zip:** describe el repositorio, no el plugin. El zip lleva `plugin.json`, el kernel, skills, agentes, hooks, scripts, el README y la licencia (Apache 2.0, que exige acompañar la distribución).
+- **`/t4l:setup` es un diagnóstico de solo lectura, no un instalador.** `scripts/t4l-setup.sh` revisa la herramienta obligatoria (`git`), las recomendadas (`jq`, cuyo hueco cubre un fallback con sed en los hooks, y `timeout`, sin el cual la verificación no tiene límite de tiempo) y las opcionales (`claude`, `gremlins`, `ccc`, `markitdown`, `pi-worker`, `engram`), cada una con lo que habilita y cómo instalarla. En un repositorio dice si los hooks de verificación están activos, usando la misma lógica que los hooks (`hooks/lib.sh`): sin config, `T4L_HOOKS=off`, config versionada sin `T4L_TRUST_CONFIG=1` o `disable=1`. Instalar queda en manos del usuario: no hay Homebrew en esta máquina y cada herramienta tiene su gestor. `/t4l:init` sigue siendo la configuración por repositorio.
+- **Prueba real:** el plugin se instaló desde el marketplace local con un `CLAUDE_CONFIG_DIR` aislado (`claude plugin details` muestra las 4 skills, los 4 agentes y los 4 eventos de hooks, unos 570 tokens fijos por sesión), y `/t4l:setup` corrió en una sesión headless y resumió el resultado. `claude plugin validate --strict` pasa en el marketplace; en el plugin solo avisa que falta un ícono, que no es necesario fuera del directorio oficial.

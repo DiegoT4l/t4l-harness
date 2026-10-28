@@ -31,31 +31,47 @@ None of them fits as is. This repository decides, piece by piece, what to adopt,
 
 ```
 .github/         CI and release workflows
-.claude-plugin/  plugin manifest
+.claude-plugin/  plugin manifest and the marketplace that lists it
 rules/           kernel injected into every session (t4l.md)
-skills/          t4l (router + playbooks), init, correct
+skills/          t4l (router + playbooks), setup, init, correct
 agents/          implementer, judge, reviewer, workflow-master
 hooks/           hooks.json + POSIX sh hooks (guard, verification, branches, size, kernel)
-scripts/         t4l-init, t4l-task, t4l-regress, t4l-size, t4l-integrate, t4l-search,
+scripts/         t4l-setup, t4l-init, t4l-task, t4l-regress, t4l-size, t4l-integrate, t4l-search,
                  t4l-ingest, t4l-checkpoints, t4l-journey, t4l-mutate, t4l-package
 journeys/        reproducible sessions that measure the harness, with the slug fixture and shared states
-tests/           hooks, regress, task, size, integrate, integrations, journey, mutate, package
+tests/           hooks, regress, task, size, integrate, integrations, journey, mutate, package, setup
 docs/            references, design, manual test scenarios (Spanish)
 ```
 
-## Use it
+## Install
 
-From a checkout:
+This repository is also a plugin marketplace. In Claude Code:
 
-```bash
-claude --plugin-dir ~/t4l-harness
+```
+/plugin install t4l --marketplace DiegoT4l/t4l-harness
 ```
 
-Or from a release: download `t4l-<version>.zip` from the GitHub Releases page and run `claude --plugin-dir t4l-<version>.zip`.
+On Claude Code older than 2.1.275, add the marketplace first:
 
-The `SessionStart` hook injects the kernel, so nothing needs to be copied into `~/.claude`. In each repository:
+```
+/plugin marketplace add DiegoT4l/t4l-harness
+/plugin install t4l@t4l-harness
+```
 
-- `/t4l:init` enables the verification hooks by writing `.t4l/config`. It detects Go and TypeScript.
+`/plugin update t4l` pulls the latest version later; restart Claude Code to apply it.
+
+Other ways to load it, without installing:
+
+- From a checkout: `claude --plugin-dir ~/t4l-harness`.
+- From a release: download `t4l-<version>.zip` from the GitHub Releases page and run `claude --plugin-dir t4l-<version>.zip`.
+
+The `SessionStart` hook injects the kernel, so nothing needs to be copied into `~/.claude`.
+
+## Use it
+
+- `/t4l:setup` checks the machine: `git` is required, `jq` and `timeout` are recommended, and every optional tool turns on one feature. It also says whether the current repository has the verification hooks on. It only reads.
+- `/t4l:init` enables the verification hooks in a repository by writing `.t4l/config`. It detects Go and TypeScript.
+- `/t4l` routes a request. The router also triggers on its own when a request asks for a change.
 - `/t4l:correct` turns a repeated correction into an enforced rule.
 
 Per-repository state lives in `.t4l/`, which is git-ignored.
@@ -73,15 +89,15 @@ Per-repository state lives in `.t4l/`, which is git-ignored.
 | v0.5.1 | `pickup` journeys. No playbook: both pass without one |
 | v0.5.2 | Optional mutation testing of changed code (`t4l-mutate.sh`, Go with gremlins); the `judge` treats surviving mutants as missing tests |
 | v0.5.3 | `perf` playbook (journey pass rate 0/3 without it, 2/3 with it). `babysit` journey, no playbook: it passes without one |
-
-Next: v1.0, packaging (`t4l:setup`, a marketplace in this repository, documentation).
+| v0.5.4 | CI pipelines and release-please releases with the plugin zip attached |
+| v1.0 | Plugin: marketplace in this repository, `/t4l:setup`, install documentation |
 
 ## Test and measure
 
 Script tests (no tokens spent):
 
 ```bash
-for t in hooks regress task size integrate integrations journey mutate package; do sh tests/$t.sh; done
+for t in hooks regress task size integrate integrations journey mutate package setup; do sh tests/$t.sh; done
 ```
 
 Journeys run real sessions and spend tokens: about 6 USD and 10 minutes for all twelve with the default model. Each one runs in a throwaway copy of `journeys/fixtures/slug`, with Engram disabled so that measurement runs do not write to your memory.
@@ -100,19 +116,19 @@ The manual scenarios and what to look for are in [`docs/testing.md`](docs/testin
 
 - **Branches.** `dev` is the default branch and integrates the work. Open feature branches from `dev` and send them back by PR. `main` only receives PRs from `dev`, and every merge into it is a candidate release.
 - **CI** (`.github/workflows/ci.yml`) runs on every PR and push to `dev` and `main`:
-  - `lint`: shellcheck 0.11.0 and actionlint, both pinned and checksum-verified, plus the manifest checks;
+  - `lint`: shellcheck 0.11.0 and actionlint, both pinned and checksum-verified, plus the manifest checks (`plugin.json`, `marketplace.json`, hooks);
   - `test`: one job per shell suite, with Go and gremlins installed;
   - `package`: builds the plugin zip and checks what it contains.
 - **Releases** (`.github/workflows/release.yml`) use [release-please](https://github.com/googleapis/release-please).
-  - On each push to `main` it keeps a release PR up to date. The PR bumps `.claude-plugin/plugin.json`, `version.txt` and `.release-please-manifest.json`, and writes `CHANGELOG.md` from the Conventional Commits.
+  - On each push to `main` it keeps a release PR up to date. The PR bumps `.claude-plugin/plugin.json` and `.release-please-manifest.json`, and writes `CHANGELOG.md` from the Conventional Commits.
   - Merging that PR tags `vX.Y.Z` and creates the GitHub Release, with `t4l-<version>.zip` attached.
 - **Protection.** A ruleset on `dev` and `main` blocks deletion and force pushes, and requires a PR with every CI check green. release-please opens its PR with the `RELEASE_PLEASE_TOKEN` Actions secret, so CI runs on it too.
-- **Versioning before 1.0.** `feat` and `fix` bump the patch version, and a breaking change bumps the minor. To release a milestone as a specific version, add a `Release-As: 0.6.0` footer to a commit.
+- **Versioning.** Semantic versioning from the Conventional Commits: `fix` bumps the patch, `feat` the minor, and a breaking change (`!` or a `BREAKING CHANGE:` footer) the major. The marketplace entry carries no version, so `plugin.json` is the only place it lives. To force a specific version, add a `Release-As: X.Y.Z` footer to a commit.
 - **Releasable commits.** `ci`, `build`, `chore`, `docs`, `test` and `refactor` commits alone do not open a release PR.
 
 ## Optional integrations
 
-t4l works without them. The `SessionStart` hook announces the ones that are installed.
+t4l works without them. The `SessionStart` hook announces the ones that are installed, and `/t4l:setup` lists them all with what each one enables.
 
 ```bash
 uv tool install 'cocoindex-code[full]'                          # semantic code search (ccc)
@@ -127,3 +143,7 @@ To enable search in a repository, run `sh scripts/t4l-search.sh --init`; the ind
 - No AI attribution in commits, PRs or code. The `block-ai-attribution` hook in `~/.claude` enforces it.
 - No Homebrew: install with pacman or paru, or use upstream binaries.
 - It must coexist with `engram` and `pi-workers` without duplicating them.
+
+## License
+
+[Apache License 2.0](LICENSE).
