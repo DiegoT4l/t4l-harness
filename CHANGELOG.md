@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.0](https://github.com/DiegoT4l/t4l-harness/compare/v1.1.0...v1.2.0) (2026-10-28)
+
+
+### Features
+
+* check for new releases and turn on auto-update ([999f68f](https://github.com/DiegoT4l/t4l-harness/commit/999f68f1da063cc461804431b869b996516bc945))
+* check for new releases and turn on auto-update ([e182c6e](https://github.com/DiegoT4l/t4l-harness/commit/e182c6e09a002d5d2cf12ff177d1ec15c68bd3d7))
+
 ## [1.1.0](https://github.com/DiegoT4l/t4l-harness/compare/v1.0.0...v1.1.0) (2026-10-28)
 
 

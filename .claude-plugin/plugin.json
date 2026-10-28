@@ -1,6 +1,6 @@
 {
   "name": "t4l",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Adaptive engineering harness: ODD as the backbone, TDD and SDD as modes chosen per task.",
   "author": {
     "name": "DiegoT4l"
