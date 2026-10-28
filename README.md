@@ -106,6 +106,7 @@ The manual scenarios and what to look for are in [`docs/testing.md`](docs/testin
 - **Releases** (`.github/workflows/release.yml`) use [release-please](https://github.com/googleapis/release-please).
   - On each push to `main` it keeps a release PR up to date. The PR bumps `.claude-plugin/plugin.json`, `version.txt` and `.release-please-manifest.json`, and writes `CHANGELOG.md` from the Conventional Commits.
   - Merging that PR tags `vX.Y.Z` and creates the GitHub Release, with `t4l-<version>.zip` attached.
+- **Protection.** A ruleset on `dev` and `main` blocks deletion and force pushes, and requires a PR with every CI check green. release-please opens its PR with the `RELEASE_PLEASE_TOKEN` Actions secret, so CI runs on it too.
 - **Versioning before 1.0.** `feat` and `fix` bump the patch version, and a breaking change bumps the minor. To release a milestone as a specific version, add a `Release-As: 0.6.0` footer to a commit.
 - **Releasable commits.** `ci`, `build`, `chore`, `docs`, `test` and `refactor` commits alone do not open a release PR.
 
