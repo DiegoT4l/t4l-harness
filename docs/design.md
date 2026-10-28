@@ -406,7 +406,7 @@ El playbook (`skills/t4l/playbooks/perf.md`) pide medir la línea base antes de 
 
 ## 14. Repositorio, CI y releases
 
-- **Ramas:** `dev` es la rama por defecto e integra; las features llegan por PR a `dev`. `main` solo recibe PRs desde `dev` y es la que publica.
+- **Ramas:** `main <- dev <- feature`. `main` es la rama por defecto y solo tiene código publicado: el marketplace lee `marketplace.json` y el plugin desde la rama por defecto, así que instalar desde GitHub da el último release. `dev` integra; las features salen de `dev` y vuelven a `dev` por PR (la base hay que elegirla, porque GitHub propone `main`). `main` solo recibe PRs desde `dev` y es la que publica.
 - **CI** (`.github/workflows/ci.yml`), en PRs y pushes a `dev` y `main`: `lint` (shellcheck 0.11.0 y actionlint 1.7.12, descargados con checksum verificado; manifiestos coherentes), `test` (una suite por job, con Go y gremlins) y `package` (el zip del plugin y su contenido). Las actions van fijadas por SHA.
 - **Releases** con release-please (`.github/workflows/release.yml`): cada push a `main` actualiza un PR de release desde los Conventional Commits. Al mergearlo se crean el tag `vX.Y.Z` y el GitHub Release, y el job `publish` adjunta `t4l-<versión>.zip`, armado con `scripts/t4l-package.sh` desde el tag (solo lo que el plugin usa en tiempo de ejecución). Antes de 1.0, `feat` y `fix` subían el parche y un cambio incompatible el minor. Desde 1.0 rige semver: `fix` sube el parche, `feat` el minor y un cambio incompatible el major. Una versión concreta se fija con `Release-As:`.
 - **Punto de partida:** v0.5.3 se publicó a mano sobre el `main` de la v0.5 con el mismo script, para que release-please cuente desde ahí.
