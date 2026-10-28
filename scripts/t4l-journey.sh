@@ -119,7 +119,6 @@ done
 case $repeat in '' | *[!0-9]* | 0) die "--repeat needs a positive integer" ;; esac
 case $tmo in '' | *[!0-9]*) die "--timeout needs seconds" ;; esac
 command -v jq >/dev/null 2>&1 || die "jq is required"
-command -v "$claude" >/dev/null 2>&1 || die "claude not found (set T4L_CLAUDE)"
 
 files=""
 if [ "$all" -eq 1 ]; then
@@ -135,6 +134,7 @@ for _n in $names; do
 	fi
 done
 [ -n "$files" ] || usage
+command -v "$claude" >/dev/null 2>&1 || die "claude not found (set T4L_CLAUDE)"
 
 rev=$(git -C "$plugin" describe --always --dirty 2>/dev/null || echo norev)
 [ -n "$out" ] || out="$here/.t4l/journeys/$(date +%Y%m%d-%H%M%S)-$rev"
