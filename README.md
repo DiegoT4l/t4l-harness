@@ -37,10 +37,10 @@ rules/           kernel injected into every session (t4l.md)
 skills/          t4l (router + playbooks), setup, init, correct
 agents/          implementer, judge, reviewer, workflow-master
 hooks/           hooks.json + POSIX sh hooks (guard, verification, branches, size, kernel)
-scripts/         t4l-setup, t4l-init, t4l-task, t4l-regress, t4l-size, t4l-integrate, t4l-search,
+scripts/         t4l-setup, t4l-version, t4l-init, t4l-task, t4l-regress, t4l-size, t4l-integrate, t4l-search,
                  t4l-ingest, t4l-checkpoints, t4l-journey, t4l-mutate, t4l-package
 journeys/        reproducible sessions that measure the harness, with the slug fixture and shared states
-tests/           hooks, regress, task, size, integrate, integrations, journey, mutate, package, setup, install
+tests/           hooks, regress, task, size, integrate, integrations, journey, mutate, package, setup, install, version
 docs/            references, design, manual test scenarios (Spanish)
 ```
 
@@ -53,6 +53,8 @@ curl -fsSL https://raw.githubusercontent.com/DiegoT4l/t4l-harness/main/install.s
 ```
 
 It runs the `claude plugin` commands below: it adds this repository as a marketplace and installs or updates `t4l`. It is safe to run again. Pass `sh -s -- --scope project` to install it for the current project only. Read [`install.sh`](install.sh) before piping it into a shell.
+
+It also turns on Claude Code's auto-update for this marketplace, by setting `autoUpdate` on its entry in your settings file (this needs `jq`; pass `--no-auto-update` to skip it). With it on, Claude Code checks for a new release in the background during a session, installs it, and loads it on `/reload-plugins` or the next launch.
 
 Or from inside Claude Code, since this repository is also a plugin marketplace:
 
@@ -67,7 +69,9 @@ On Claude Code older than 2.1.275, add the marketplace first:
 /plugin install t4l@t4l-harness
 ```
 
-`/plugin update t4l` pulls the latest version later; restart Claude Code to apply it.
+To turn auto-update on without the script: `/plugin`, **Marketplaces**, `t4l-harness`, **Enable auto-update**. Without it, `claude plugin update t4l@t4l-harness` pulls the latest version; restart Claude Code to apply it.
+
+**Version check.** Once a day, in the background, t4l fetches the version on `main`. When it is newer than the one running, the session starts with a one-line notice. `sh scripts/t4l-version.sh` checks right away, and `/t4l:setup` includes it. `T4L_UPDATE_CHECK=off` turns the check off; a checkout loaded with `--plugin-dir` never gets the notice.
 
 Other ways to load it, without installing:
 
@@ -106,7 +110,7 @@ Per-repository state lives in `.t4l/`, which is git-ignored.
 Script tests (no tokens spent):
 
 ```bash
-for t in hooks regress task size integrate integrations journey mutate package setup install; do sh tests/$t.sh; done
+for t in hooks regress task size integrate integrations journey mutate package setup install version; do sh tests/$t.sh; done
 ```
 
 Journeys run real sessions and spend tokens: about 6 USD and 10 minutes for all twelve with the default model. Each one runs in a throwaway copy of `journeys/fixtures/slug`, with Engram disabled so that measurement runs do not write to your memory.

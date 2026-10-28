@@ -1,6 +1,6 @@
 ---
 name: setup
-description: Check this machine for the tools t4l uses (git, jq, timeout, and the optional claude, gremlins, ccc, markitdown, pi-worker, engram) and report which features are active, plus whether the current repository has the verification hooks on. Use when the user types /t4l:setup, just installed the plugin, or asks why a t4l feature is not working.
+description: Check this machine for the tools t4l uses (git, jq, timeout, and the optional claude, gremlins, ccc, markitdown, pi-worker, engram), the installed and latest t4l version with the auto-update state, and whether the current repository has the verification hooks on. Use when the user types /t4l:setup, just installed the plugin, or asks why a t4l feature is not working.
 disable-model-invocation: true
 ---
 
@@ -22,6 +22,7 @@ A read-only check. It installs nothing and writes nothing.
    - A missing **required** tool (exit status 1) blocks t4l. Say so first.
    - A missing **recommended** tool degrades a feature; the output says how.
    - A missing **optional** tool only turns off the feature on its line. Do not push the user to install everything.
+   - Under **Version**: if an update is available and auto-update is off, give the update command from the output, and mention that `/plugin`, Marketplaces, t4l-harness, Enable auto-update keeps it current.
 
 3. For each missing tool the user wants, show the install command from the output and run it only if the user asks you to.
 
