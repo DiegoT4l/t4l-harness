@@ -114,7 +114,7 @@ The manual scenarios and what to look for are in [`docs/testing.md`](docs/testin
 
 ## Development workflow
 
-- **Branches.** `dev` is the default branch and integrates the work. Open feature branches from `dev` and send them back by PR. `main` only receives PRs from `dev`, and every merge into it is a candidate release.
+- **Branches.** `main <- dev <- feature branch`. `main` is the default branch and holds released code, so the marketplace and a fresh clone get the latest release. `dev` integrates the work: open feature branches from `dev` and send them back to `dev` by PR (pick `dev` as the base, since GitHub proposes `main`). `main` only receives PRs from `dev`, and every merge into it is a candidate release.
 - **CI** (`.github/workflows/ci.yml`) runs on every PR and push to `dev` and `main`:
   - `lint`: shellcheck 0.11.0 and actionlint, both pinned and checksum-verified, plus the manifest checks (`plugin.json`, `marketplace.json`, hooks);
   - `test`: one job per shell suite, with Go and gremlins installed;
