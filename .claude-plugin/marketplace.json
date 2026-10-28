@@ -1,0 +1,14 @@
+{
+  "name": "t4l-harness",
+  "description": "The t4l engineering harness for Claude Code.",
+  "owner": {
+    "name": "DiegoT4l"
+  },
+  "plugins": [
+    {
+      "name": "t4l",
+      "source": "./",
+      "description": "Adaptive engineering harness: ODD as the backbone, TDD and SDD as modes chosen per task."
+    }
+  ]
+}
