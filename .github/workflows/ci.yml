@@ -1,0 +1,111 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install shellcheck and actionlint (pinned, checksum verified)
+        run: |
+          set -eu
+          mkdir -p "$RUNNER_TEMP/bin"
+          cd "$RUNNER_TEMP"
+          curl -fsSL -o shellcheck.tar.xz \
+            https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.xz
+          echo "8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198  shellcheck.tar.xz" | sha256sum -c -
+          tar -xJf shellcheck.tar.xz
+          mv shellcheck-v0.11.0/shellcheck bin/
+          curl -fsSL -o actionlint.tar.gz \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  actionlint.tar.gz" | sha256sum -c -
+          tar -xzf actionlint.tar.gz -C bin actionlint
+          echo "$RUNNER_TEMP/bin" >>"$GITHUB_PATH"
+
+      - name: shellcheck
+        run: |
+          shellcheck --version | sed -n 2p
+          shellcheck -x -P SCRIPTDIR scripts/*.sh hooks/*.sh tests/*.sh
+          shellcheck -s sh journeys/states/*.sh
+
+      - name: actionlint
+        run: actionlint -shellcheck=shellcheck
+
+      - name: Manifests
+        run: |
+          set -eu
+          jq -e '.name == "t4l" and (.version | test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))' .claude-plugin/plugin.json >/dev/null
+          jq -e '.hooks' hooks/hooks.json >/dev/null
+          plugin=$(jq -r .version .claude-plugin/plugin.json)
+          manifest=$(jq -r '."."' .release-please-manifest.json)
+          if [ "$plugin" != "$manifest" ]; then
+            echo "plugin.json says $plugin but .release-please-manifest.json says $manifest" >&2
+            exit 1
+          fi
+
+  test:
+    name: test (${{ matrix.suite }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [hooks, regress, task, size, integrate, integrations, journey, mutate, package]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+          cache: false
+
+      - name: Install gremlins
+        if: matrix.suite == 'mutate'
+        run: go install github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0
+
+      - name: Git identity for test repositories
+        run: |
+          git config --global user.email ci@example.com
+          git config --global user.name ci
+          git config --global init.defaultBranch main
+
+      - name: sh tests/${{ matrix.suite }}.sh
+        run: sh "tests/${{ matrix.suite }}.sh"
+
+  package:
+    name: package
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build the plugin zip
+        run: |
+          set -eu
+          zip=$(sh scripts/t4l-package.sh)
+          unzip -l "$zip"
+          for p in .claude-plugin/plugin.json rules/t4l.md skills/t4l/SKILL.md hooks/hooks.json scripts/t4l-task.sh; do
+            unzip -l "$zip" "$p" >/dev/null || { echo "missing from the zip: $p" >&2; exit 1; }
+          done
+          if unzip -l "$zip" | grep -Eq ' (tests|journeys|docs)/'; then
+            echo "the zip must not contain tests, journeys or docs" >&2
+            exit 1
+          fi
