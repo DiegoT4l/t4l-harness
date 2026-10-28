@@ -69,7 +69,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [hooks, regress, task, size, integrate, integrations, journey, mutate, package]
+        suite: [hooks, regress, task, size, integrate, integrations, journey, mutate, package, setup]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -106,7 +106,7 @@ jobs:
           set -eu
           zip=$(sh scripts/t4l-package.sh)
           unzip -l "$zip"
-          for p in .claude-plugin/plugin.json rules/t4l.md skills/t4l/SKILL.md hooks/hooks.json scripts/t4l-task.sh LICENSE; do
+          for p in .claude-plugin/plugin.json rules/t4l.md skills/t4l/SKILL.md skills/setup/SKILL.md hooks/hooks.json scripts/t4l-task.sh LICENSE; do
             unzip -l "$zip" "$p" >/dev/null || { echo "missing from the zip: $p" >&2; exit 1; }
           done
           if unzip -l "$zip" | grep -Eq ' (tests|journeys|docs)/'; then
