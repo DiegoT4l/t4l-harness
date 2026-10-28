@@ -8,6 +8,7 @@ body:
       value: |
         Thanks for reporting. Fill in what you know; a reproduction is the most useful part.
         Do not paste secrets, tokens or private code.
+        For a security vulnerability, do not open an issue: [report it privately](https://github.com/DiegoT4l/t4l-harness/security/advisories/new).
   - type: input
     id: t4l-version
     attributes:
