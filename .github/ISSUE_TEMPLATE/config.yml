@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/DiegoT4l/t4l-harness/security/advisories/new
+    about: Report it privately, not in a public issue. See SECURITY.md.
   - name: Usage question
     url: https://github.com/DiegoT4l/t4l-harness#readme
     about: Install, commands and how the router decides are in the README; the design is in docs/design.md (Spanish).
