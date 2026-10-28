@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Usage question
+    url: https://github.com/DiegoT4l/t4l-harness#readme
+    about: Install, commands and how the router decides are in the README; the design is in docs/design.md (Spanish).

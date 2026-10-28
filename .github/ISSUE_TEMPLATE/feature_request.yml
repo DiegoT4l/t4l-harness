@@ -1,0 +1,53 @@
+name: Feature request
+description: Propose a change to how t4l works.
+title: "feat: "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        t4l adds a rule, a playbook or a hook only when it earns its place: a playbook needs a journey that fails without it, and a rule that can be checked is checked by a hook or a script. Describe the problem first; the solution can change.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What goes wrong today, or what you cannot do. A real session where it happened helps most.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What t4l should do instead.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Router or playbooks (/t4l)
+        - Agents (implementer, judge, reviewer, workflow-master)
+        - Hooks (guard, verification, branch guard, size warning, session start)
+        - Scripts (t4l-task, t4l-regress, t4l-integrate, t4l-mutate, ...)
+        - Install, update or packaging
+        - Documentation
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: How to tell it works
+      description: A journey, a test or a check that would fail today and pass with the change.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched the existing issues and this is not a duplicate.
+          required: true
