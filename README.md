@@ -30,23 +30,28 @@ None of them fits as is. This repository decides, piece by piece, what to adopt,
 ## Layout
 
 ```
+.github/         CI and release workflows
 .claude-plugin/  plugin manifest
 rules/           kernel injected into every session (t4l.md)
 skills/          t4l (router + playbooks), init, correct
 agents/          implementer, judge, reviewer, workflow-master
 hooks/           hooks.json + POSIX sh hooks (guard, verification, branches, size, kernel)
 scripts/         t4l-init, t4l-task, t4l-regress, t4l-size, t4l-integrate, t4l-search,
-                 t4l-ingest, t4l-checkpoints, t4l-journey, t4l-mutate
+                 t4l-ingest, t4l-checkpoints, t4l-journey, t4l-mutate, t4l-package
 journeys/        reproducible sessions that measure the harness, with the slug fixture and shared states
-tests/           hooks, regress, task, size, integrate, integrations, journey, mutate
+tests/           hooks, regress, task, size, integrate, integrations, journey, mutate, package
 docs/            references, design, manual test scenarios (Spanish)
 ```
 
 ## Use it
 
+From a checkout:
+
 ```bash
 claude --plugin-dir ~/t4l-harness
 ```
+
+Or from a release: download `t4l-<version>.zip` from the GitHub Releases page and run `claude --plugin-dir t4l-<version>.zip`.
 
 The `SessionStart` hook injects the kernel, so nothing needs to be copied into `~/.claude`. In each repository:
 
@@ -76,7 +81,7 @@ Next: v1.0, packaging (`t4l:setup`, a marketplace in this repository, documentat
 Script tests (no tokens spent):
 
 ```bash
-for t in hooks regress task size integrate integrations journey mutate; do sh tests/$t.sh; done
+for t in hooks regress task size integrate integrations journey mutate package; do sh tests/$t.sh; done
 ```
 
 Journeys run real sessions and spend tokens: about 6 USD and 10 minutes for all twelve with the default model. Each one runs in a throwaway copy of `journeys/fixtures/slug`, with Engram disabled so that measurement runs do not write to your memory.
@@ -90,6 +95,19 @@ sh scripts/t4l-journey.sh --compare .t4l/journeys/A .t4l/journeys/B
 ```
 
 The manual scenarios and what to look for are in [`docs/testing.md`](docs/testing.md).
+
+## Development workflow
+
+- **Branches.** `dev` is the default branch and integrates the work. Open feature branches from `dev` and send them back by PR. `main` only receives PRs from `dev`, and every merge into it is a candidate release.
+- **CI** (`.github/workflows/ci.yml`) runs on every PR and push to `dev` and `main`:
+  - `lint`: shellcheck 0.11.0 and actionlint, both pinned and checksum-verified, plus the manifest checks;
+  - `test`: one job per shell suite, with Go and gremlins installed;
+  - `package`: builds the plugin zip and checks what it contains.
+- **Releases** (`.github/workflows/release.yml`) use [release-please](https://github.com/googleapis/release-please).
+  - On each push to `main` it keeps a release PR up to date. The PR bumps `.claude-plugin/plugin.json`, `version.txt` and `.release-please-manifest.json`, and writes `CHANGELOG.md` from the Conventional Commits.
+  - Merging that PR tags `vX.Y.Z` and creates the GitHub Release, with `t4l-<version>.zip` attached.
+- **Versioning before 1.0.** `feat` and `fix` bump the patch version, and a breaking change bumps the minor. To release a milestone as a specific version, add a `Release-As: 0.6.0` footer to a commit.
+- **Releasable commits.** `ci`, `build`, `chore`, `docs`, `test` and `refactor` commits alone do not open a release PR.
 
 ## Optional integrations
 
