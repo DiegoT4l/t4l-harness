@@ -30,6 +30,7 @@ None of them fits as is. This repository decides, piece by piece, what to adopt,
 ## Layout
 
 ```
+install.sh       one-line installer (curl | sh)
 .github/         CI and release workflows
 .claude-plugin/  plugin manifest and the marketplace that lists it
 rules/           kernel injected into every session (t4l.md)
@@ -39,13 +40,21 @@ hooks/           hooks.json + POSIX sh hooks (guard, verification, branches, siz
 scripts/         t4l-setup, t4l-init, t4l-task, t4l-regress, t4l-size, t4l-integrate, t4l-search,
                  t4l-ingest, t4l-checkpoints, t4l-journey, t4l-mutate, t4l-package
 journeys/        reproducible sessions that measure the harness, with the slug fixture and shared states
-tests/           hooks, regress, task, size, integrate, integrations, journey, mutate, package, setup
+tests/           hooks, regress, task, size, integrate, integrations, journey, mutate, package, setup, install
 docs/            references, design, manual test scenarios (Spanish)
 ```
 
 ## Install
 
-This repository is also a plugin marketplace. In Claude Code:
+From a terminal, with Claude Code already installed:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/DiegoT4l/t4l-harness/main/install.sh | sh
+```
+
+It runs the `claude plugin` commands below: it adds this repository as a marketplace and installs or updates `t4l`. It is safe to run again. Pass `sh -s -- --scope project` to install it for the current project only. Read [`install.sh`](install.sh) before piping it into a shell.
+
+Or from inside Claude Code, since this repository is also a plugin marketplace:
 
 ```
 /plugin install t4l --marketplace DiegoT4l/t4l-harness
@@ -97,7 +106,7 @@ Per-repository state lives in `.t4l/`, which is git-ignored.
 Script tests (no tokens spent):
 
 ```bash
-for t in hooks regress task size integrate integrations journey mutate package setup; do sh tests/$t.sh; done
+for t in hooks regress task size integrate integrations journey mutate package setup install; do sh tests/$t.sh; done
 ```
 
 Journeys run real sessions and spend tokens: about 6 USD and 10 minutes for all twelve with the default model. Each one runs in a throwaway copy of `journeys/fixtures/slug`, with Engram disabled so that measurement runs do not write to your memory.
@@ -122,6 +131,7 @@ The manual scenarios and what to look for are in [`docs/testing.md`](docs/testin
 - **Releases** (`.github/workflows/release.yml`) use [release-please](https://github.com/googleapis/release-please).
   - On each push to `main` it keeps a release PR up to date. The PR bumps `.claude-plugin/plugin.json` and `.release-please-manifest.json`, and writes `CHANGELOG.md` from the Conventional Commits.
   - Merging that PR tags `vX.Y.Z` and creates the GitHub Release, with `t4l-<version>.zip` attached.
+  - The release commit exists only on `main`, so the same workflow opens a `main -> dev` PR with auto-merge on. It merges itself once CI is green, and `dev` stays the most up-to-date branch. Merge `dev -> main` PRs with a merge commit, not squash or rebase, so that `main` stays an ancestor of `dev`.
 - **Protection.** A ruleset on `dev` and `main` blocks deletion and force pushes, and requires a PR with every CI check green. release-please opens its PR with the `RELEASE_PLEASE_TOKEN` Actions secret, so CI runs on it too.
 - **Versioning.** Semantic versioning from the Conventional Commits: `fix` bumps the patch, `feat` the minor, and a breaking change (`!` or a `BREAKING CHANGE:` footer) the major. The marketplace entry carries no version, so `plugin.json` is the only place it lives. To force a specific version, add a `Release-As: X.Y.Z` footer to a commit.
 - **Releasable commits.** `ci`, `build`, `chore`, `docs`, `test` and `refactor` commits alone do not open a release PR.

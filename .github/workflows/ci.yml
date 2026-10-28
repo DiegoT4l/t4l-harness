@@ -41,7 +41,7 @@ jobs:
       - name: shellcheck
         run: |
           shellcheck --version | sed -n 2p
-          shellcheck -x -P SCRIPTDIR scripts/*.sh hooks/*.sh tests/*.sh
+          shellcheck -x -P SCRIPTDIR install.sh scripts/*.sh hooks/*.sh tests/*.sh
           shellcheck -s sh journeys/states/*.sh
 
       - name: actionlint
@@ -69,7 +69,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [hooks, regress, task, size, integrate, integrations, journey, mutate, package, setup]
+        suite: [hooks, regress, task, size, integrate, integrations, journey, mutate, package, setup, install]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
