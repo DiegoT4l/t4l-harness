@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.0](https://github.com/DiegoT4l/t4l-harness/compare/v1.0.0...v1.1.0) (2026-10-28)
+
+
+### Features
+
+* install the plugin with one curl command ([79a0adb](https://github.com/DiegoT4l/t4l-harness/commit/79a0adbf7942d6651649130fdfbae6e5c7d56f56))
+* install the plugin with one curl command ([c4c3dfc](https://github.com/DiegoT4l/t4l-harness/commit/c4c3dfc111ddd6c1209460f4a425e223faba115b))
+
 ## [1.0.0](https://github.com/DiegoT4l/t4l-harness/compare/v0.5.4...v1.0.0) (2026-10-28)
 
 
