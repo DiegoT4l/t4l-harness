@@ -3,6 +3,9 @@ name: Release
 # On every push to main, release-please keeps a release PR up to date from the
 # Conventional Commits since the last release. Merging that PR tags vX.Y.Z,
 # creates the GitHub Release, and the publish job attaches the plugin zip.
+# It uses RELEASE_PLEASE_TOKEN (a fine-grained token with Contents and Pull
+# requests write access) instead of GITHUB_TOKEN: pull requests opened with
+# GITHUB_TOKEN do not trigger CI, and main requires CI to merge.
 
 on:
   push:
@@ -28,6 +31,7 @@ jobs:
       - id: release
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
