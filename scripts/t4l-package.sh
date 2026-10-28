@@ -1,6 +1,6 @@
 #!/bin/sh
 # Build the plugin archive from a git ref: only what the plugin needs at run
-# time (manifest, kernel, skills, agents, hooks, scripts), never the tests,
+# time (manifest, kernel, skills, agents, hooks, scripts, license), never the tests,
 # journeys or docs. Claude Code loads it with: claude --plugin-dir <zip>
 #
 # Usage: t4l-package.sh [--ref REF] [--out DIR] [--expect VERSION]
@@ -56,6 +56,10 @@ fi
 
 mkdir -p "$out" || die "cannot create $out"
 zip="$out/t4l-$version.zip"
-git archive --format=zip -o "$zip" "$sha" .claude-plugin rules skills agents hooks scripts README.md ||
+# the marketplace manifest describes the repository, not the plugin
+license=""
+git cat-file -e "$sha:LICENSE" 2>/dev/null && license=LICENSE
+# shellcheck disable=SC2086  # license is empty or one word
+git archive --format=zip -o "$zip" "$sha" .claude-plugin/plugin.json rules skills agents hooks scripts README.md $license ||
 	die "git archive failed"
 echo "$zip"

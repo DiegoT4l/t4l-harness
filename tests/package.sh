@@ -30,7 +30,8 @@ git -C "$R" init -q -b main
 git -C "$R" config user.email t@example.com
 git -C "$R" config user.name t
 echo '{"name":"t4l","version":"1.2.3"}' >"$R/.claude-plugin/plugin.json"
-for f in rules/t4l.md skills/t4l/SKILL.md agents/judge.md hooks/hooks.json scripts/t4l-task.sh tests/x.sh docs/d.md README.md; do
+echo '{"name":"t4l-harness"}' >"$R/.claude-plugin/marketplace.json"
+for f in rules/t4l.md skills/t4l/SKILL.md agents/judge.md hooks/hooks.json scripts/t4l-task.sh tests/x.sh docs/d.md README.md LICENSE; do
 	echo x >"$R/$f"
 done
 git -C "$R" add -A
@@ -46,8 +47,11 @@ check "builds t4l-<version>.zip" 0 "$TMP/out/t4l-1.2.3.zip"
 OUT=$(unzip -l "$TMP/out/t4l-1.2.3.zip")
 RC=0
 check "zip holds the runtime files" 0 "skills/t4l/SKILL.md"
+check "zip holds the license" 0 " LICENSE"
 case $OUT in *tests/* | *docs/*) RC=1 ;; esac
 check "zip leaves out tests and docs" 0 ""
+case $OUT in *marketplace.json*) RC=1 ;; esac
+check "zip leaves out the marketplace manifest" 0 ""
 
 P --out "$TMP/out" --expect v1.2.3
 check "expect accepts a v-prefixed tag" 0 "t4l-1.2.3.zip"
