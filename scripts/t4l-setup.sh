@@ -42,6 +42,10 @@ tool optional pi-worker "mechanical bulk work delegated to Pi workers" "install 
 tool optional engram "cross-session memory and the feature document mirror" "install the Engram plugin"
 
 echo
+echo "Version"
+sh "$here/t4l-version.sh"
+
+echo
 echo "This repository"
 if root=$(t4l_main_root "$PWD" 2>/dev/null) && [ -n "$root" ]; then
 	echo "root: $root"

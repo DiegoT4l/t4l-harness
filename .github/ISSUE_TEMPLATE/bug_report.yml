@@ -1,0 +1,102 @@
+name: Bug report
+description: Something in t4l does not work as documented.
+title: "bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Fill in what you know; a reproduction is the most useful part.
+        Do not paste secrets, tokens or private code.
+        For a security vulnerability, do not open an issue: [report it privately](https://github.com/DiegoT4l/t4l-harness/security/advisories/new).
+  - type: input
+    id: t4l-version
+    attributes:
+      label: t4l version
+      description: "`claude plugin list` shows it, or the version line of `/t4l:setup`."
+      placeholder: "1.1.0"
+    validations:
+      required: true
+  - type: input
+    id: claude-version
+    attributes:
+      label: Claude Code version
+      description: Output of `claude --version`.
+      placeholder: "2.1.312 (Claude Code)"
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How t4l was installed
+      options:
+        - install.sh (curl | sh)
+        - /plugin install from the marketplace
+        - claude --plugin-dir with a checkout
+        - claude --plugin-dir with a release zip
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Router or playbooks (/t4l)
+        - Agents (implementer, judge, reviewer, workflow-master)
+        - Hooks (guard, verification, branch guard, size warning, session start)
+        - Scripts (t4l-task, t4l-regress, t4l-integrate, t4l-mutate, ...)
+        - Install, update or packaging
+        - Documentation
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "Arch Linux, macOS 15, Windows 11 + WSL2 Ubuntu 24.04"
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: The behavior you saw, with the exact error text if there is one.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: The smallest sequence that shows the problem, starting from a fresh session if you can.
+      placeholder: |
+        1. In a Go repository, run /t4l:init
+        2. Ask for ...
+        3. See ...
+    validations:
+      required: true
+  - type: textarea
+    id: setup
+    attributes:
+      label: Output of /t4l:setup
+      description: "Or `sh scripts/t4l-setup.sh` from the plugin directory. It lists which tools are installed and whether the hooks are on."
+      render: text
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or hook output
+      description: Hook messages, script output, or the relevant part of `claude --debug`.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched the existing issues and this is not a duplicate.
+          required: true
+        - label: The report contains no secrets, tokens or private code.
+          required: true

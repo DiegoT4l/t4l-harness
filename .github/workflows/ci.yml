@@ -69,7 +69,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [hooks, regress, task, size, integrate, integrations, journey, mutate, package, setup, install]
+        suite: [hooks, regress, task, size, integrate, integrations, journey, mutate, package, setup, install, version]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
