@@ -16,6 +16,16 @@ You will get an answer in the advisory. Once a fix is released, the advisory is 
 
 Only the latest release gets security fixes. Installs from `install.sh` or with auto-update on receive it without doing anything.
 
+## What the hooks protect against
+
+t4l's hooks keep an agent on the process: no code before the specs are approved, the lead delegates instead of editing, the judge and the reviewer only write their reports, each parallel implementer stays inside its task's files, no commits on protected branches. They catch an agent that drifts or takes a shortcut. They are not a sandbox and do not stop a determined attacker.
+
+- `guard` blocks Edit and Write before they happen. `bash-guard` compares the files git sees before and after each Bash command and reports a write that `guard` would have refused. It detects after the fact, does not undo, and does not see files ignored by git (other than `.t4l/`) or writes from a command left running in the background.
+- `branch-guard` reads the command text. It is a first barrier, not a replacement for branch protection on the server.
+- `T4L_GUARD=off`, `T4L_HOOKS=off` and `T4L_ALLOW_PROTECTED=1` turn controls off. They are read from the environment Claude Code started with, so a command the agent runs cannot set them.
+
+For real isolation, use Claude Code's sandbox and `deny` permission rules, branch protection or rulesets on the Git server, and a throwaway clone without secrets for untrusted work. A way to defeat a hook is a bug worth reporting as an issue; it is a vulnerability only when it also falls under the scope below.
+
 ## Scope
 
 t4l runs shell hooks and scripts on the user's machine, so these are in scope:

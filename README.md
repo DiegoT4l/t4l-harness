@@ -22,7 +22,7 @@ None of them fits as is. This repository decides, piece by piece, what to adopt,
   - `reviewer`: one lens per launch.
   - `workflow-master`: Kanban board, parallel implementers in isolated worktrees.
 - **Enforcement.**
-  - `guard` blocks writes before spec approval and outside a task's scope.
+  - `guard` blocks writes before spec approval and outside a task's scope. A Bash command that writes what `guard` would refuse is reported back to the agent right after it runs.
   - Opt-in verification hooks: a quick check after each edit and the full verify before a turn ends.
   - A branch guard and a slice-size warning.
 - **Measurement.** Journeys replay real headless sessions on a throwaway fixture and judge them with deterministic checkpoints. Use them to compare harness versions. A new playbook has to earn its place with a journey that fails without it.
@@ -138,7 +138,7 @@ The manual scenarios and what to look for are in [`docs/testing.md`](docs/testin
   - The release commit exists only on `main`, so the same workflow opens a `main -> dev` PR with auto-merge on. It merges itself once CI is green, and `dev` stays the most up-to-date branch. Merge `dev -> main` PRs with a merge commit, not squash or rebase, so that `main` stays an ancestor of `dev`.
 - **Protection.** A ruleset on `dev` and `main` blocks deletion and force pushes, and requires a PR with every CI check green. release-please opens its PR with the `RELEASE_PLEASE_TOKEN` Actions secret, so CI runs on it too.
 - **Versioning.** Semantic versioning from the Conventional Commits: `fix` bumps the patch, `feat` the minor, and a breaking change (`!` or a `BREAKING CHANGE:` footer) the major. The marketplace entry carries no version, so `plugin.json` is the only place it lives. To force a specific version, add a `Release-As: X.Y.Z` footer to a commit.
-- **Issues and PRs.** Issues use the forms in `.github/ISSUE_TEMPLATE` (bug report, feature request; blank issues are off). Security vulnerabilities are reported privately, as [`SECURITY.md`](SECURITY.md) explains. PRs start from `.github/pull_request_template.md`. Its rules apply to agents too: nothing invented, `TODO(author)` for what cannot be confirmed, a check marked passed only if it ran, and the readiness checklist left to the human author.
+- **Issues and PRs.** Issues use the forms in `.github/ISSUE_TEMPLATE` (bug report, feature request; blank issues are off). Security vulnerabilities are reported privately, as [`SECURITY.md`](SECURITY.md) explains. That file also says what the hooks protect against and what they do not. PRs start from `.github/pull_request_template.md`. Its rules apply to agents too: nothing invented, `TODO(author)` for what cannot be confirmed, a check marked passed only if it ran, and the readiness checklist left to the human author.
 - **Releasable commits.** `ci`, `build`, `chore`, `docs`, `test` and `refactor` commits alone do not open a release PR.
 
 ## Optional integrations
