@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.3.0](https://github.com/DiegoT4l/t4l-harness/compare/v1.2.0...v1.3.0) (2026-10-29)
+
+
+### Features
+
+* catch writes made through Bash that guard would refuse ([062f521](https://github.com/DiegoT4l/t4l-harness/commit/062f521ec54ff97499ad8abe7f38538c00ac4d24))
+* catch writes made through Bash that guard would refuse ([07cc6dc](https://github.com/DiegoT4l/t4l-harness/commit/07cc6dce6c3d17a9f813147aff92f08aca1ad22a))
+* catch writes made through Bash that guard would refuse ([7ea041c](https://github.com/DiegoT4l/t4l-harness/commit/7ea041c96c83c3f9c382f32257928d2307911d8e))
+
 ## [1.2.0](https://github.com/DiegoT4l/t4l-harness/compare/v1.1.0...v1.2.0) (2026-10-28)
 
 
