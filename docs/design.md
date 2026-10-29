@@ -228,6 +228,8 @@ Un cambio de requisito reescribe solo las `S#` afectadas y reabre solo sus tarea
 
 ## 7. Forma de distribución
 
+t4l es un **harness para Claude Code**: la capa de proceso y gobierno que rodea al agente (estado, puertas, roles, verificación y medición). Claude Code es el runtime: el bucle de herramientas, el contexto, los permisos y el sandbox son suyos. El plugin es solo la forma de distribuir el harness.
+
 Plugin de Claude Code `t4l` (carpeta `plugin/` con `.claude-plugin/plugin.json`, `skills/`, `agents/`, `hooks/hooks.json`) + un skill `t4l:setup` que instala `rules/t4l.md` en `~/.claude/rules/`, como hace pstack. Marketplace propio en este mismo repo para instalarlo con `/plugin`.
 
 ## 8. Decisiones tomadas
@@ -248,6 +250,8 @@ Plugin de Claude Code `t4l` (carpeta `plugin/` con `.claude-plugin/plugin.json`,
 | 12 | `reviewer` | Solo con riesgo alto o más de ~400 líneas, una lente por invocación. |
 | 13 | `workflow-master` | v0.4. Kanban solo (sin Scrum). Fusiona en la rama de la feature; el merge a `main` y el push son del usuario. WIP por defecto 2. |
 | 14 | Escrituras por Bash | Se detectan comparando el estado de git antes y después del comando, no adivinando por el texto del comando: un filtro por patrones (`>`, `sed -i`, `tee`) se esquiva con `python -c` o un script. No se revierte nada solo; el agente recibe la regla y deshace el cambio. Límites: archivos ignorados por git fuera de `.t4l/`, comandos en segundo plano y cambios de otro agente concurrente en el mismo checkout. Los hooks son guardarraíles del proceso, no un sandbox (`SECURITY.md`). |
+| 15 | Naturaleza del proyecto | Un harness para Claude Code, no un plugin: el plugin es el empaquetado. Lo que Claude Code ya resuelve (bucle, MCP, sandbox, permisos) no se reimplementa; el harness lo gobierna y lo verifica. |
+| 16 | Motor de grafos | En Go, siguiendo la forma del paquete `workflow` de ADK Go v2, y al final de la hoja de ruta (sección 17). |
 
 ### Pendientes
 
@@ -269,6 +273,18 @@ Plugin de Claude Code `t4l` (carpeta `plugin/` con `.claude-plugin/plugin.json`,
   - v0.5.2: mutación opcional (hecha, sección 13). Go con `gremlins`; TS solo como comando configurable.
   - v0.5.3: `perf` se ganó su playbook; `babysit`, no (sección 13).
 - **v1.0 — Plugin (hecha).** Marketplace en este repositorio, `/t4l:setup`, documentación de instalación (sección 15).
+- **v1.1 — Instalador (hecha).** `install.sh` de una línea con `curl` (sección 15).
+- **v1.2 — Actualizaciones (hecha).** Verificador de versiones y auto-update de Claude Code (sección 15); formularios de issues, plantilla de PR y `SECURITY.md`.
+- **v1.3 — Escrituras por Bash (hecha).** Hook `bash-guard` y modelo de amenazas en `SECURITY.md` (decisión 14).
+
+Después de la v1.3, a partir de la comparación con la arquitectura de referencia de harnesses (sección 16). Cada punto tiene su issue:
+
+- **v1.4 — Calibrar el `judge`** ([#30](https://github.com/DiegoT4l/t4l-harness/issues/30)). Un set de 20 a 30 casos con veredicto y crítica humanos; `t4l-calibrate.sh` corre el `judge` sobre ellos y da el porcentaje de acuerdo. Se ajusta `agents/judge.md` con las discrepancias hasta llegar al 85 %, y el set queda como journey de regresión.
+- **v1.5 — Reintentos con dientes** ([#31](https://github.com/DiegoT4l/t4l-harness/issues/31)). Contadores `verify_fails` y `judge_rounds` en `.t4l/state`, límites en `.t4l/config`. Al pasarse, `stop-verify` deja de reinyectar y `guard` bloquea hasta que el usuario retome.
+- **v1.6 — Costo por sesión** ([#32](https://github.com/DiegoT4l/t4l-harness/issues/32)). Hook `SessionEnd` que lee el `transcript_path` y escribe `.t4l/stats.tsv` (tokens, turnos, carril, duración); `t4l-stats.sh` lo resume. Cumple lo que promete la sección 11.
+- **v1.7 — Seguridad verificada.** `/t4l:setup` revisa el sandbox y las reglas `deny` de secretos ([#33](https://github.com/DiegoT4l/t4l-harness/issues/33)); `t4l-secrets.sh` busca secretos en el cambio antes de `ship` ([#34](https://github.com/DiegoT4l/t4l-harness/issues/34)).
+- **v2.0 — Motor de grafos en Go** ([#35](https://github.com/DiegoT4l/t4l-harness/issues/35)). Al final, porque se apoya en los contadores de la v1.5 y en las métricas de la v1.6. Diseño preliminar en la sección 17.
+- **Descartado por ahora:** servidor MCP propio, modelos de respaldo y automatización 24/7 por eventos. Los dos primeros son de Claude Code; lo último queda fuera del alcance mientras no haya un caso (candidato: una routine programada para `babysit`).
 
 ## 10. `workflow-master` (v0.4)
 
@@ -425,3 +441,64 @@ El playbook (`skills/t4l/playbooks/perf.md`) pide medir la línea base antes de 
 - **Actualizaciones:** se usa el auto-update de Claude Code, no uno propio. Está apagado por defecto para marketplaces de terceros y `marketplace.json` no puede encenderlo; lo decide, en este orden, `autoUpdate` en la entrada de `extraKnownMarketplaces` de un archivo de settings, el interruptor de `/plugin` (`known_marketplaces.json`) y el valor por defecto. `install.sh` pone `autoUpdate: true` en la entrada que `marketplace add` acaba de escribir en el settings de su scope, con `jq`, escribiendo a través del archivo para no romper un `settings.json` enlazado desde dotfiles. Sin `jq` o sin esa entrada no inventa nada y explica el interruptor. Claude Code hace la pasada en sesiones interactivas, tras el primer mensaje y un retardo aleatorio de hasta diez minutos, y la versión nueva carga con `/reload-plugins` o en el siguiente arranque. Detecta el cambio por el `version` de `plugin.json`, que release-please sube en cada release.
 - **Verificador de versiones (`scripts/t4l-version.sh`):** compara el `version` instalado con el de `main` (`T4L_LATEST_URL`), e informa el estado del auto-update con el mismo orden que Claude Code. `--notice`, desde el hook `SessionStart`, solo lee un caché en `CLAUDE_PLUGIN_DATA` y, si tiene más de un día o no existe, lo refresca en segundo plano: el arranque nunca espera a la red. Avisa con una línea si hay una versión más nueva. Calla en un checkout cargado con `--plugin-dir` (la copia de desarrollo) y con `T4L_UPDATE_CHECK=off`.
 - **Prueba real:** el plugin se instaló desde el marketplace local con un `CLAUDE_CONFIG_DIR` aislado (`claude plugin details` muestra las 4 skills, los 4 agentes y los 4 eventos de hooks, unos 570 tokens fijos por sesión), y `/t4l:setup` corrió en una sesión headless y resumió el resultado. `claude plugin validate --strict` pasa en el marketplace; en el plugin solo avisa que falta un ícono, que no es necesario fuera del directorio oficial.
+
+## 16. Comparación con la arquitectura de referencia (después de la v1.3)
+
+Contra un manual de diseño de harnesses (contexto y memoria, herramientas y orquestación, seguridad, evaluación). En esa analogía el LLM es la CPU y el harness el sistema operativo; aquí el sistema operativo lo comparte Claude Code, y t4l pone el proceso encima (decisión 15). Lo que ya está:
+
+- **Memoria de estado determinista:** `.t4l/state`, el tablero y el documento de feature, escritos por scripts, no por el modelo. Largo plazo en Engram.
+- **Contexto modular:** kernel de menos de 150 líneas, playbooks bajo demanda, agentes con contexto fresco.
+- **Revisión 4R:** el `reviewer` tiene las cuatro lentes (risk, reliability, readability, resilience), una por invocación.
+- **Presupuesto de cambio:** `t4l-size.sh` y `size-warn` con 400 líneas, tareas con `Files`.
+- **Orquestación:** carriles, `Deps`, implementadores en paralelo en worktrees y rama de integración (fan-out y fan-in).
+- **Humano en el bucle:** puerta de specs en SDD, branch guard, merge y push del usuario.
+- **Evaluación:** nivel 1 con 12 suites en CI; nivel 2 con journeys de checkpoints binarios, comparación A/B y mutación.
+
+Lo que falta, y es la hoja de ruta de la sección 9:
+
+| Hueco | Por qué importa | Versión |
+|---|---|---|
+| El `judge` no está calibrado contra veredictos humanos | Un juez LLM sin medir es el antipatrón clásico de evaluación | v1.4 |
+| Los límites de reintento son prosa | El modelo los ignora bajo presión; lo verificable lo verifica un hook (principio 2) | v1.5 |
+| No se mide el costo en sesiones reales | La sección 11 lo promete y sin eso no se puede medir el costo de contexto del harness | v1.6 |
+| El sandbox y las reglas `deny` se recomiendan pero no se verifican | `SECURITY.md` delega el aislamiento en Claude Code; nadie comprueba que esté | v1.7 |
+| No hay búsqueda de secretos antes de publicar | El escaneo de GitHub llega tarde, después del push | v1.7 |
+| El orden de los pasos vive en prosa y en ramas sueltas del `guard` | Los procedimientos en prosa pierden fiabilidad al crecer | v2.0 |
+
+Parcial, sin versión propia: el spotlighting de datos no confiables existe en `t4l-ingest.sh` (encabezado de procedencia y aviso de líneas con forma de instrucción), pero `judge` y `reviewer` leen el repositorio sin ese filtro.
+
+## 17. Motor de grafos (v2.0, diseño preliminar)
+
+Issue [#35](https://github.com/DiegoT4l/t4l-harness/issues/35). Va al final de la hoja de ruta.
+
+**Problema.** El carril grande es una secuencia con bucles (specs → aprobación → plan-check → implementar → integrar → verificar → `judge` → `ship`, y vuelta a implementar si el `judge` rechaza), pero el orden lo sigue el modelo leyendo prosa, y lo que sí se impone está repartido en campos de `.t4l/state` y ramas del `guard`. Cada regla nueva agrega otro campo y otra rama.
+
+**Modelo: ADK Go v2.** Se toma la forma del paquete `workflow` de ADK Go: los grafos son código Go, no prompts.
+
+| ADK Go | En t4l |
+|---|---|
+| `workflow.NewFunctionNode` | Nodo `fn`: un script o una función Go, sin modelo (`plan-check`, `integrate`, `verify`, `regress`). |
+| `workflow.NewEmittingFunctionNode` + `event.Routes` | Nodo que decide la ruta leyendo una salida estructurada (el `Verdict:` del reporte del `judge`). |
+| `workflow.NewAgentNode` | Nodo `agent`: un subagente de Claude Code (`implementer`, `judge`, `reviewer`) con su plantilla de brief. |
+| Nodo de entrada humana | Nodo `human`: la aprobación de specs. |
+| `workflow.StringRoute` / `BoolRoute` | Aristas condicionales (`APPROVED`, `CHANGES_REQUESTED`, ruta por defecto). |
+| `workflow.Chain` / `workflow.Concat` | Cableado del grafo. |
+| `workflow.NewJoinNode` | Fan-in: la integración espera a todas las tareas. |
+| `inputSchema` / `outputSchema` | Contratos: cada nodo declara el archivo que produce y los campos obligatorios, parseados a un struct y validados antes de enrutar. |
+
+Lo propio de t4l: las aristas de vuelta llevan `max` iteraciones (absorbe los contadores de la v1.5), y el nodo actual decide qué permiten `guard` y `bash-guard`.
+
+**Ejecución.**
+
+- **Primero dentro de la sesión.** `t4l graph` guarda el nodo o los nodos actuales en `.t4l/state`. `t4l graph next` valida la salida del nodo, toma la ruta y avanza. El lead sigue conduciendo, pero los hooks solo permiten lo que el nodo actual permite (solo `.t4l/` en un nodo `human`, solo el `implementer` en `implement`), así que no puede saltarse ni reordenar pasos.
+- **Después, sin supervisión.** El mismo grafo corrido de punta a punta, con los nodos `agent` como `claude -p` headless (lo que ya hace el runner de journeys), para trabajo en segundo plano o en CI.
+
+**Migración sin cambio de comportamiento.** Expresar el carril grande y el modo paralelo como grafos, usar los journeys existentes (`large-gate`, `flag-sdd`, los de paralelo) como prueba de aceptación y recién entonces borrar las ramas sueltas del `guard` y de `t4l-task.sh`.
+
+**Por qué Go.** La decisión 5 admite un CLI en Go cuando los scripts se vuelven frágiles; un parser y validador de grafos cruza esa línea. Un binario estático, sin runtime.
+
+**Preguntas abiertas (spike antes de escribir el motor).**
+
+1. ¿Dependencia de ADK Go o motor propio con la misma forma? ADK sirve si sus nodos de función corren sin modelo y una ejecución puede pausar en un nodo `human` y reanudarse desde estado persistido en otra invocación del CLI. Si para eso exige su propio bucle de agente o su runtime de sesiones, se escribe un motor chico propio y se conserva el vocabulario.
+2. ¿Cómo viaja el binario? Builds por plataforma adjuntos al release y descargados en el primer uso, o `go build` al instalar. Hoy el zip es solo shell.
+3. ¿Los grafos se pueden redefinir por repositorio? En la primera versión no: vienen compilados con el harness.
