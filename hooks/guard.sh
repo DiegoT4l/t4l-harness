@@ -6,7 +6,8 @@
 #  - t4l:judge and t4l:reviewer are read-only: they may write only .t4l/reports/.
 #
 # Only active while a feature is open (.t4l/state exists and phase != done).
-# Covers Edit and Write, not writes made through Bash. Off with T4L_GUARD=off.
+# Covers Edit and Write. Writes made through Bash are caught after the fact by
+# bash-guard.sh, which reuses these rules. Off with T4L_GUARD=off.
 
 # shellcheck source=lib.sh
 . "$(dirname "$0")/lib.sh"

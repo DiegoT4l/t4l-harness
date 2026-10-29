@@ -460,6 +460,109 @@ check "workflow-master: cannot edit project files" 2 "does not edit project file
 run_guard_at "$R" "$R/.t4l/worktrees/integration/src/a.go" "t4l:workflow-master"
 check "workflow-master: can resolve conflicts in the integration worktree" 0
 
+# --- bash-guard ---------------------------------------------------------------
+
+BGUARD="$HERE/hooks/bash-guard.sh"
+export TMPDIR="$TMP/tmpdir"
+mkdir -p "$TMPDIR"
+
+# run_bash <cwd> <agent_type> <command>: pre hook, the command, post hook.
+run_bash() {
+	_in=$(printf '{"cwd":"%s","agent_type":"%s","tool_use_id":"toolu_%s","tool_input":{"command":"x"}}' "$1" "$2" "$((PASS + FAIL))")
+	printf '%s' "$_in" | sh "$BGUARD" pre
+	(cd "$1" && sh -c "$3") >/dev/null 2>&1
+	OUT=$(printf '%s' "$_in" | sh "$BGUARD" post 2>&1)
+	RC=$?
+}
+
+new_repo
+mkdir -p "$R/src"
+run_bash "$R" "" 'echo x >src/a.go'
+check "bash: no state file allows everything" 0
+[ -z "$(ls "$TMPDIR"/t4l-bash-* 2>/dev/null)" ] && RC=0 || RC=1
+OUT=""
+check "bash: no state file leaves no snapshot" 0
+
+new_repo
+mkdir -p "$R/src"
+write_state pending planning
+run_bash "$R" "" 'echo x >src/a.go'
+check "bash: gate pending catches a redirect into a project file" 2 "src/a.go"
+check "bash: the message carries the guard's reason" 2 "not approved"
+run_bash "$R" "" 'mkdir -p .t4l/tasks && echo spec >.t4l/tasks/f.md'
+check "bash: gate pending allows .t4l/ files" 0
+run_bash "$R" "" 'echo x >"src/a b.go"'
+check "bash: a file name with a space is caught" 2 "src/a b.go"
+[ -z "$(find "$TMPDIR" -type f)" ] && RC=0 || RC=1
+OUT=""
+check "bash: post removes its snapshot" 0
+
+new_repo
+write_state approved implementing
+run_bash "$R" "" 'sed -i.bak "s/base/changed/" base.txt && rm base.txt.bak'
+check "bash: implementing catches the lead's sed -i on a tracked file" 2 "base.txt"
+git -C "$R" checkout -q -- base.txt
+run_bash "$R" "" 'rm base.txt'
+check "bash: deleting a tracked file is a write" 2 "base.txt"
+git -C "$R" checkout -q -- base.txt
+printf -- '--- a/base.txt\n+++ b/base.txt\n@@ -1 +1 @@\n-base\n+patched\n' >"$TMP/p.diff"
+run_bash "$R" "" "git apply '$TMP/p.diff'"
+check "bash: git apply is caught" 2 "base.txt"
+git -C "$R" checkout -q -- base.txt
+run_bash "$R" "" 'cp base.txt copy.txt'
+check "bash: cp into the project is caught" 2 "copy.txt"
+run_bash "$R" "" 'cat base.txt; git status >/dev/null'
+check "bash: commands that only read are silent" 0
+run_bash "$R" "t4l:implementer" 'echo y >impl.txt'
+check "bash: implementing allows the implementer" 0
+T4L_GUARD=off run_bash "$R" "" 'echo z >off.txt'
+check "bash: T4L_GUARD=off disables" 0
+T4L_NO_JQ=1 run_bash "$R" "" 'echo w >nojq.txt'
+check "bash: works without jq (sed fallback)" 2 "nojq.txt"
+
+new_repo
+write_state approved implementing
+echo dirty >"$R/base.txt"
+run_bash "$R" "" 'true'
+check "bash: a file already dirty before the command is not blamed" 0
+run_bash "$R" "" 'echo dirtier >base.txt'
+check "bash: changing an already dirty file again is caught" 2 "base.txt"
+
+new_repo
+mkdir -p "$R/src" "$R/.t4l/tasks" "$R/.t4l/reports"
+echo spec >"$R/.t4l/tasks/f.md"
+write_state approved implementing
+run_bash "$R" "t4l:judge" 'echo fix >src/a.go'
+check "bash: the judge cannot write project files" 2 "read-only"
+run_bash "$R" "t4l:judge" 'echo "- [x] T1" >>.t4l/tasks/f.md'
+check "bash: the judge cannot edit the feature document" 2 ".t4l/tasks/f.md"
+run_bash "$R" "t4l:reviewer" 'echo ok >.t4l/reports/review_f.md'
+check "bash: the reviewer can write its report" 0
+
+new_repo
+write_state approved implementing
+printf 'parallel=1\n' >>"$R/.t4l/state"
+make_worktree a
+register T1 "$WT" "internal/**"
+mkdir -p "$WT/internal"
+run_bash "$WT" "t4l:implementer" 'echo ok >internal/x.go'
+check "bash: an implementer in its worktree may write its Files" 0
+run_bash "$WT" "t4l:implementer" 'echo no >web.go'
+check "bash: an implementer writing outside its Files is caught" 2 "outside the files of T1"
+
+new_repo
+write_state approved "done"
+run_bash "$R" "" 'echo x >a.txt'
+check "bash: phase done allows the lead again" 0
+
+new_repo
+write_state pending planning
+OUT=$(printf '{"cwd":"%s","tool_use_id":"toolu_lost"}' "$R" | sh "$BGUARD" post 2>&1)
+RC=$?
+check "bash: post without a snapshot is a no-op" 0
+
+unset TMPDIR
+
 # --- session-start: optional tools ---------------------------------------------
 
 TOOLS="$TMP/tools"

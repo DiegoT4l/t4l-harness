@@ -141,6 +141,7 @@ Fuera de v1: `prototype`, `hillclimb`, `visual-parity`, `eval`, `autopilot-*`, `
 | `post-edit-check` | PostToolUse Edit/Write | Corre el comando de test rápido definido en `.t4l/config` y muestra 3 líneas. | uncle-bob |
 | `stop-verify` | Stop | Corre `t4l verify` (suite + lint + checks del repo); si falla, lo informa antes de cerrar. | uncle-bob |
 | `guard-lead` | PreToolUse Edit/Write | En carril grande, bloquea que el lead edite `src/` y `tests/` (debe delegar). Se activa solo con un marcador en `.t4l/state`. Llega con los agentes (v0.3). | uncle-bob |
+| `bash-guard` | PreToolUse + PostToolUse/PostToolUseFailure Bash | Fotografía los archivos que git ve como cambiados (más `.t4l/`) antes y después de cada comando, y pasa cada archivo cambiado por `guard`. Si alguno se habría rechazado, se lo informa al agente con exit 2. Detecta después, no previene (v1.3). | propio |
 | `session-pickup` | SessionStart | Si hay documento de feature abierto, lo recuerda. Engram ya cubre la memoria. Llega con `pickup` (v0.4). | gentle |
 
 Scripts en **POSIX sh** (sin Bun ni binario propio en v1). Configuración por repo en `.t4l/config` (comando de test, de lint, de mutación, umbral).
@@ -241,11 +242,12 @@ Plugin de Claude Code `t4l` (carpeta `plugin/` con `.claude-plugin/plugin.json`,
 | 6 | Estado por repo | `.t4l/` ignorado por git; documento de feature espejado en Engram. |
 | 7 | Alcance de instalación | Global con kernel mínimo; playbooks bajo demanda. |
 | 8 | Modelo del `judge` | Opus con esfuerzo alto. `implementer` y `reviewer` con Sonnet. |
-| 9 | `guard-lead` | Bloqueo duro con salida de emergencia `T4L_GUARD=off`. Solo cubre Edit/Write, no escrituras por Bash. |
+| 9 | `guard-lead` | Bloqueo duro con salida de emergencia `T4L_GUARD=off`. Bloquea Edit/Write antes; las escrituras por Bash las detecta `bash-guard` después (decisión 14). |
 | 10 | Implementadores en v0.3 | Uno a la vez. El paralelismo llega con el `workflow-master` (v0.4). |
 | 11 | Explorador | Se usa el `Explore` integrado; no hay agente propio. |
 | 12 | `reviewer` | Solo con riesgo alto o más de ~400 líneas, una lente por invocación. |
 | 13 | `workflow-master` | v0.4. Kanban solo (sin Scrum). Fusiona en la rama de la feature; el merge a `main` y el push son del usuario. WIP por defecto 2. |
+| 14 | Escrituras por Bash | Se detectan comparando el estado de git antes y después del comando, no adivinando por el texto del comando: un filtro por patrones (`>`, `sed -i`, `tee`) se esquiva con `python -c` o un script. No se revierte nada solo; el agente recibe la regla y deshace el cambio. Límites: archivos ignorados por git fuera de `.t4l/`, comandos en segundo plano y cambios de otro agente concurrente en el mismo checkout. Los hooks son guardarraíles del proceso, no un sandbox (`SECURITY.md`). |
 
 ### Pendientes
 
