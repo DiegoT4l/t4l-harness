@@ -511,3 +511,8 @@ Lo propio de t4l: las aristas de vuelta llevan `max` iteraciones (absorbe los co
      - Con 10 000 ejecuciones en 20 repos, SQLite y FalkorDB dieron las mismas filas en las cuatro consultas del prototipo, incluida una de dos saltos, en unos 30 ms.
      - FalkorDB, además, necesita un contenedor y obliga a declarar los nodos compartidos en una fase aparte. Declarados desde cada ejecución, la carga falló en un 73 % y terminó con código 0.
      - Sin el modo `live` de CocoIndex, cada actualización cuesta unos 10 s a esa escala; con él, 0,05 s.
+   - **Antecedentes de otros repos: sí, con un modelo multilingüe.** Cada registro lleva un `summary` (problema y solución) que escribe el nodo `plan`. La proyección le calcula embeddings con `paraphrase-multilingual-MiniLM-L12-v2`, y el brief de `plan` incluye hasta tres ejecuciones aprobadas de otros repos que resolvieron algo parecido.
+     - En el corpus de prueba, ese modelo encontró la solución entre los tres primeros resultados en 12 de 12 consultas, también cruzando idiomas. El modelo de `ccc`, solo inglés, acertó 3 de 12, y FTS5, 1 de 12.
+     - No hay un umbral limpio, así que los resultados se muestran como pistas a verificar.
+     - El modelo tarda de 7 a 40 s en cargar, así que responde el proceso residente de la proyección.
+5. **El repo se identifica por el hash del primer commit con `--first-parent`.** Ordenar todas las raíces cambia el identificador si se mezcla una historia ajena. Los clones superficiales y los repos sin commits usan un alias por URL, que la proyección une al identificador real. Si dos proyectos que nacieron de la misma plantilla comparten la raíz, se separan con un `git config t4l.repo-id` local.

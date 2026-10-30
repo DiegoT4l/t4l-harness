@@ -39,3 +39,20 @@ coco-venv/bin/python coco/query_multi.py falkor go.mod
 `T4L_SPIKE_LIVE=1` keeps `history_multi.py` running and watching the store. Only the SQLite projection supports it.
 
 The query times in the report assume an index on `path`: `CREATE INDEX touched_path ON touched(path)` in SQLite, `CREATE INDEX FOR (f:File) ON (f.path)` in FalkorDB.
+
+### Similar solutions in other repositories
+
+`semantic.py` embeds the `summary` of each run into SQLite. `eval_semantic.py` scores a model, or FTS5 keywords, against the queries in `semantic_corpus.json`. `threshold.py` shows whether a distance cutoff can tell "already solved" from "nothing similar". They need sentence-transformers and sqlite-vec; the `cocoindex-code` tool environment has both.
+
+```sh
+py=~/.local/share/uv/tools/cocoindex-code/bin/python
+m=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+$py coco/eval_semantic.py write-store sem-store
+COCOINDEX_DB=sem.lmdb $py coco/semantic.py sem-store sem.sqlite $m
+$py coco/eval_semantic.py vectors sem.sqlite $m
+$py coco/eval_semantic.py keywords sem-store
+$py coco/threshold.py sem.sqlite $m
+```
+
+For `intfloat/multilingual-e5-small`, set `T4L_SPIKE_DOC_PREFIX='passage: '` when indexing and `T4L_SPIKE_QUERY_PREFIX='query: '` when searching.
+

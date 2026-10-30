@@ -11,6 +11,8 @@ Entorno de las mediciones: WSL2, 10 núcleos, 7 GB de RAM, sin GPU, Go 1.27.3, A
 | 1. ¿ADK Go como dependencia? | **Sí.** Los nodos de función corren sin modelo. Una ejecución se pausa en un nodo `human` y se reanuda en otro proceso desde SQLite. Los ciclos con máximo de intentos se pueden modelar. Va detrás de un paquete propio para poder cambiarlo. |
 | 2a. ¿CocoIndex como contexto de los nodos `agent`? | **Sí, con lo que ya existe.** `scripts/t4l-search.sh` ya integra `ccc` de forma opcional. El motor lo llamaría al armar el brief, con filtros de lenguaje y ruta por nodo. |
 | 2b. ¿CocoIndex como memoria del grafo, con consultas entre repositorios? | **Sí, con SQLite como destino y no con una base de grafos.** El motor escribe un registro por ejecución en un almacén por usuario, fuera de los repos, al que solo se agregan registros. CocoIndex lo proyecta a SQLite. Las cuatro consultas entre repos dieron las mismas filas en SQLite y en FalkorDB, con tiempos parecidos, y SQLite no necesita servidor. |
+| 2c. ¿Buscar en otros repos un problema ya resuelto? | **Sí, sobre los resúmenes de cada ejecución y con un modelo multilingüe.** `paraphrase-multilingual-MiniLM-L12-v2` encontró la solución correcta entre los tres primeros resultados en las 12 consultas de prueba, también cruzando español e inglés. El modelo de `ccc`, solo inglés, acertó 3 de 12, y las palabras clave (FTS5), 1 de 12. Tiene que correr en un proceso residente: en frío tarda de 7 a 40 s en arrancar. |
+| Identidad del repo | **El hash del primer commit, siguiendo la cadena de primeros padres** (`git rev-list --first-parent --max-parents=0 HEAD`). Ordenar todas las raíces cambia el identificador si se mezcla una historia ajena. Hay alias para los clones superficiales y los repos sin commits, y una forma de separar a mano dos proyectos que nacieron de la misma plantilla. |
 | 3. ¿Cómo viaja el binario? | **Binarios por plataforma adjuntos al release, descargados en el primer uso con checksum.** Compilar al instalar exige Go, tarda 25 s y descarga 1,1 GB de módulos. |
 | 4. ¿Grafos por repositorio? | **No en v2.0.** CocoIndex no lo exige: los filtros de búsqueda son configuración de cada nodo, y vienen compilados con el harness. |
 
@@ -142,6 +144,65 @@ Hay otra opción, que el motor escriba en SQLite directamente desde Go: sin Pyth
 - **Sin CocoIndex:** el almacén se sigue escribiendo, y `t4l history` avisa cómo habilitarlo.
 - **Sin base de grafos por ahora:** FalkorDB no respondió nada que SQL no respondiera, y agrega un contenedor, la restricción de las dos fases y el riesgo de fallar con código 0. Se reconsidera si aparecen consultas de muchos saltos que en SQL se vuelvan ilegibles.
 
+### 2c. Buscar en otros repos un problema ya resuelto
+
+La idea es no reinventar algo que ya se resolvió en otro repo. Al empezar una feature, el motor busca ejecuciones aprobadas de cualquier repo cuyo problema se parezca al nuevo.
+
+**Prototipo** (`semantic.py`, `eval_semantic.py`, `threshold.py`, `semantic_corpus.json`): cada registro del almacén lleva un `summary` con el problema y la solución. CocoIndex calcula el embedding de `feature: summary` con `SentenceTransformerEmbedder` y lo guarda en SQLite en una columna vectorial, que se consulta con `vec_distance_cosine` de sqlite-vec. Usa el intérprete del entorno de `cocoindex-code`, que ya trae PyTorch, sentence-transformers y sqlite-vec, sin instalar nada más.
+
+**Corpus de prueba:** 36 soluciones en 6 repos, en español y en inglés, y 12 tareas nuevas que describen un problema ya resuelto con otras palabras y a veces en otro idioma. Por ejemplo, "las tareas programadas se ejecutan una hora tarde después del cambio de horario" contra "Scheduled jobs ran an hour late after the daylight saving change…".
+
+El corpus incluye trampas léxicas: "currency exchange rates" frente a "limitar peticiones por cliente", un botón "retry" frente a "reintentar llamadas al proveedor", un "tokenizer" frente a tokens de sesión, y una alerta de "shut down" frente a "apagar el servidor".
+
+| Buscador | Primer resultado correcto | Correcto entre los tres primeros | MRR | Por consulta |
+|---|---|---|---|---|
+| Palabras clave, SQLite FTS5 (BM25) | 1/12 | 1/12 | 0,08 | < 1 ms |
+| `snowflake-arctic-embed-xs`, el modelo de `ccc` (solo inglés, 88 MB) | 0/12 | 3/12 | 0,11 | 11 ms |
+| `intfloat/multilingual-e5-small`, con prefijos `query:` y `passage:` (471 MB) | 4/12 | 9/12 | 0,57 | 22 ms |
+| **`sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`** (458 MB) | **11/12** | **12/12** | **0,96** | 71 ms |
+
+- **El idioma decide.** Con el modelo solo inglés, toda consulta en español cae en los tres documentos en español, sin importar el tema. Como en t4l las specs se escriben en los dos idiomas, el modelo tiene que ser multilingüe, y por eso no sirve el índice de `ccc` tal como está configurado.
+- **El único fallo del mejor modelo** fue "limitar cuántas peticiones puede hacer cada cliente por minuto". Puso primero la activación por porcentaje de usuarios y el rate limiter en segundo lugar.
+- **No hay un umbral limpio.** Con 8 consultas sin respuesta en el corpus, la peor distancia de un acierto fue 0,564 y la mejor de una consulta sin respuesta, 0,573. Separa en este corpus, pero con un margen que en la práctica se va a superponer. Por eso los resultados se presentan como antecedentes posibles, con su distancia y su resumen, para que el agente los verifique, igual que `t4l-search.sh` presenta pistas. No se usan como respuestas.
+- **El corpus lo escribí yo**, así que mide si el método funciona, no cómo va a rendir con resúmenes reales. Antes de dar los números por buenos hay que repetir la evaluación con resúmenes que haya escrito el motor.
+- **Arranque:** en frío, importar PyTorch y cargar el modelo tarda entre 7 y 40 s, según el caché de archivos del sistema operativo; ya cargado, cada consulta cuesta milisegundos. Una búsqueda no puede pagar ese arranque cada vez, así que tiene que atenderla un proceso residente, como hace `ccc` con su daemon. El proceso `live` de 2b puede hacer las dos cosas: mantener `history.db` al día y responder búsquedas con el modelo ya cargado. Esto último **no se probó**.
+
+**¿Y el código?** También se probó buscar en el código de varios repos a la vez, con `ccc search` sobre cada índice y uniendo por puntaje. Tiene tres problemas:
+
+- Los puntajes de distintos repos quedan todos entre 0,79 y 0,85, así que unirlos por puntaje distingue poco.
+- Los archivos generados meten ruido: ADK Go devuelve JavaScript minificado de `webui/distr`.
+- De tres consultas, dos dieron el archivo correcto primero. La tercera ("verify the checksum of a downloaded file") no encontró `install.sh` de t4l.
+
+Funciona mejor como segundo paso. Primero se buscan soluciones por resumen, y eso da el repo y los archivos que tocó esa ejecución. Después, si ese repo tiene `ccc`, se busca con `--path` limitado a esos archivos.
+
+**Recomendación:**
+
+- **Contrato del nodo `plan`:** el registro de cada ejecución lleva `summary`, con una línea de problema y otra de solución. Lo escribe el nodo `plan`, y el motor no deja avanzar si falta. Sin buenos resúmenes no hay búsqueda.
+- **Datos para abrir los archivos:** el registro también guarda la última ruta local conocida del checkout, para que el agente pueda leer los archivos de la solución encontrada.
+- **Embeddings:** CocoIndex calcula los embeddings con `paraphrase-multilingual-MiniLM-L12-v2` en la misma proyección de 2b, en una columna de `history.db`.
+- **Proceso residente:** el proceso de la proyección mantiene el modelo cargado y responde `t4l history similar "<tarea>"`.
+- **En el brief de `plan`:** el motor llama a esa búsqueda al empezar una feature y agrega al brief una sección de antecedentes en otros repos, con hasta tres ejecuciones aprobadas: repo, feature, resumen, archivos y distancia.
+- **Sin el proceso o sin el modelo**, esa sección no aparece y el resto funciona igual.
+
+### Identidad del repo
+
+El almacén necesita un identificador estable para cada repo. El nombre de la carpeta no sirve, y la URL de `origin` cambia si el repo se mueve. La propuesta es el hash del primer commit, y se probaron sus casos difíciles:
+
+| Caso | Qué pasa con el hash de la raíz |
+|---|---|
+| Clon completo | Funciona. Es el mismo en todos los clones y no depende de la carpeta ni del remoto. |
+| Historia ajena mezclada con `--allow-unrelated-histories` | Quedan dos raíces. Si se ordenan y se toma la primera, ganó la historia importada y **el identificador cambió**. Con `--first-parent` se mantiene la raíz original. |
+| Clon superficial (`--depth 1`) | Devuelve el commit de corte, que no es la raíz y cambia con cada fetch. Se detecta con `git rev-parse --is-shallow-repository`. |
+| Repo sin commits | No hay raíz. |
+| Proyecto que nace de clonar una plantilla | Comparte la raíz con la plantilla y con todos los demás proyectos que salieron de ella. |
+
+**Propuesta:**
+
+- **Identificador:** `git rev-list --first-parent --max-parents=0 HEAD`.
+- **Etiquetas, no identidad:** cada registro guarda además la URL de `origin` normalizada, el nombre del repo y la ruta local del checkout. Sirven para mostrar y para resolver alias.
+- **Clon superficial o repo sin commits:** se escribe con un identificador provisional, `url-` más el hash de la URL normalizada. La proyección lo une al identificador real cuando aparece un registro de un clon completo con la misma URL.
+- **Plantillas:** si un mismo identificador aparece con dos URLs distintas, `t4l history` lo avisa. Un `git config t4l.repo-id <nombre>` local separa ese clon. No se versiona ni se escribe nada en el repo.
+
 ### La frontera entre Go y Python
 
 | Uso | Frontera |
@@ -171,5 +232,6 @@ CocoIndex no obliga a definir grafos por proyecto. Las fuentes del índice de c�
 - La dependencia es ADK Go v2, con la versión fijada, detrás de `internal/graph`. La sesión va en `.t4l/graph.db`.
 - El máximo de intentos va en la salida de cada nodo. ADK no lo trae.
 - El brief de los nodos `agent` incluye los resultados de `t4l-search.sh` con filtros por nodo, si está habilitado.
-- El motor escribe un registro por ejecución en `${XDG_DATA_HOME:-~/.local/share}/t4l/runs/<repo>/<id>.json`, con un identificador estable de repo. CocoIndex lo proyecta a `history.db` (SQLite), y `t4l history` lo consulta entre repos.
+- El motor escribe un registro por ejecución en `${XDG_DATA_HOME:-~/.local/share}/t4l/runs/<repo>/<id>.json`. El repo se identifica por el hash del primer commit con `--first-parent`, con alias para los clones superficiales y los repos sin commits. CocoIndex proyecta el almacén a `history.db` (SQLite), y `t4l history` lo consulta entre repos.
+- El registro lleva un `summary` (problema y solución) que el nodo `plan` tiene que escribir. Con él, la proyección calcula embeddings con un modelo multilingüe, y el brief de `plan` incluye antecedentes de otros repos. Las búsquedas las responde el proceso residente de la proyección.
 - Los binarios por plataforma se adjuntan al release y se descargan en el primer uso con checksum.
