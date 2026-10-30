@@ -1,0 +1,3 @@
+*.db
+*.lmdb
+__pycache__/

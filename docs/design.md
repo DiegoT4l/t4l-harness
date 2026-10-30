@@ -497,13 +497,14 @@ Lo propio de t4l: las aristas de vuelta llevan `max` iteraciones (absorbe los co
 
 **Por qué Go.** La decisión 5 admite un CLI en Go cuando los scripts se vuelven frágiles; un parser y validador de grafos cruza esa línea. Un binario estático, sin runtime.
 
-**Preguntas abiertas (spike antes de escribir el motor, [#38](https://github.com/DiegoT4l/t4l-harness/issues/38)).**
+**Decisiones del spike ([#38](https://github.com/DiegoT4l/t4l-harness/issues/38)).** La evidencia y las mediciones están en [`docs/spikes/graph-engine.md`](spikes/graph-engine.md); los prototipos, en `spikes/graph/`.
 
-1. ¿Dependencia de ADK Go o motor propio con la misma forma? ADK sirve si sus nodos de función corren sin modelo y una ejecución puede pausar en un nodo `human` y reanudarse desde estado persistido en otra invocación del CLI. Si para eso exige su propio bucle de agente o su runtime de sesiones, se escribe un motor chico propio y se conserva el vocabulario.
-2. ¿Cómo viaja el binario? Builds por plataforma adjuntos al release y descargados en el primer uso, o `go build` al instalar. Hoy el zip es solo shell.
-3. ¿Los grafos se pueden redefinir por repositorio? En la primera versión no: vienen compilados con el harness. Se revisa si CocoIndex obliga a otra cosa, por ejemplo para elegir sus fuentes por proyecto.
-4. ¿Cómo trabaja el grafo junto con [CocoIndex](https://cocoindex.io)? Hay dos usos posibles:
-   - **Contexto de los nodos `agent`:** `cocoindex-code` (`ccc search --json` o su tool MCP `search`) entregaría los fragmentos de código relevantes en el brief, en lugar de que el lead los pegue a mano. Hay que medir el tiempo de indexado, si la actualización incremental es lo bastante rápida para correr en cada transición de nodo y qué pasa sin un modelo de embeddings configurado.
-   - **Memoria del grafo:** los flujos incrementales de CocoIndex podrían ser nodos `fn`, o escribir el historial de ejecuciones (veredictos, specs, archivos tocados) en un grafo de propiedades como Neo4j, FalkorDB o SurrealDB, para preguntar, por ejemplo, qué features pasadas tocaron un archivo y qué dijo el judge. Hay que ver si eso aporta algo frente a Engram y `.t4l/`.
-
-   CocoIndex es Python con núcleo en Rust y el motor es Go, así que la frontera también es parte de la pregunta: el CLI o MCP de `ccc`, un proceso sidecar, o dejarlo opcional detrás de un nodo `fn` para que el harness funcione sin él.
+1. **ADK Go como dependencia, detrás de un paquete propio.**
+   - Lo que se comprobó: los nodos de función corren sin modelo. Una ejecución se pausa en un nodo `human` y se reanuda en otro proceso desde una sesión en SQLite (`.t4l/graph.db`). Las salidas vuelven tipadas, y los ciclos con ruta condicional son válidos.
+   - El máximo de intentos no existe en ADK: lo lleva cada nodo en su salida.
+   - `internal/graph` expone solo lo que usa t4l, y la versión queda fijada. Si una versión rompe ese paquete sin dar algo a cambio, o el peso de las dependencias (141 módulos) complica los builds, se escribe un motor propio con el mismo vocabulario.
+2. **El binario viaja como build por plataforma adjunto al release.** Se descarga en el primer uso, se verifica con checksum y se guarda en `CLAUDE_PLUGIN_DATA`. Compilar al instalar exige Go, tarda 25 s y descarga 1,1 GB de módulos. El zip sigue siendo solo shell.
+3. **Los grafos vienen compilados con el harness.** CocoIndex no obliga a definirlos por repositorio: los filtros de búsqueda son configuración de cada nodo.
+4. **CocoIndex:**
+   - **Contexto de los nodos `agent`: sí, sin runtime nuevo.** El motor llama a `t4l-search.sh`, que ya integra `ccc` de forma opcional, con la consulta y los filtros del nodo. Si `ccc` no está habilitado, el brief sale sin esa sección. Los filtros hacen falta porque, sin ellos, la documentación le gana al código.
+   - **Memoria del grafo: todavía no.** El prototipo con FalkorDB funciona y se actualiza de forma incremental, pero a la escala de t4l un `grep` sobre `.t4l/reports` responde lo mismo. El motor escribe `.t4l/runs/<id>.json` por ejecución, para que un historial con CocoIndex se pueda agregar después como componente opcional sin tocar el motor.
