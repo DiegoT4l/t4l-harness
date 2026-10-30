@@ -5,8 +5,6 @@
 
 ### Features
 
-* catch writes made through Bash that guard would refuse ([062f521](https://github.com/DiegoT4l/t4l-harness/commit/062f521ec54ff97499ad8abe7f38538c00ac4d24))
-* catch writes made through Bash that guard would refuse ([07cc6dc](https://github.com/DiegoT4l/t4l-harness/commit/07cc6dce6c3d17a9f813147aff92f08aca1ad22a))
 * catch writes made through Bash that guard would refuse ([7ea041c](https://github.com/DiegoT4l/t4l-harness/commit/7ea041c96c83c3f9c382f32257928d2307911d8e))
 
 ## [1.2.0](https://github.com/DiegoT4l/t4l-harness/compare/v1.1.0...v1.2.0) (2026-10-28)
@@ -14,7 +12,6 @@
 
 ### Features
 
-* check for new releases and turn on auto-update ([999f68f](https://github.com/DiegoT4l/t4l-harness/commit/999f68f1da063cc461804431b869b996516bc945))
 * check for new releases and turn on auto-update ([e182c6e](https://github.com/DiegoT4l/t4l-harness/commit/e182c6e09a002d5d2cf12ff177d1ec15c68bd3d7))
 
 ## [1.1.0](https://github.com/DiegoT4l/t4l-harness/compare/v1.0.0...v1.1.0) (2026-10-28)
@@ -22,7 +19,6 @@
 
 ### Features
 
-* install the plugin with one curl command ([79a0adb](https://github.com/DiegoT4l/t4l-harness/commit/79a0adbf7942d6651649130fdfbae6e5c7d56f56))
 * install the plugin with one curl command ([c4c3dfc](https://github.com/DiegoT4l/t4l-harness/commit/c4c3dfc111ddd6c1209460f4a425e223faba115b))
 
 ## [1.0.0](https://github.com/DiegoT4l/t4l-harness/compare/v0.5.4...v1.0.0) (2026-10-28)

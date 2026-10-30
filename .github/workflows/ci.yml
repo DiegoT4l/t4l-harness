@@ -62,6 +62,13 @@ jobs:
             echo "plugin.json says $plugin but .release-please-manifest.json says $manifest" >&2
             exit 1
           fi
+          # release-please also reads the PR title in a merge commit's body, so
+          # a change merged without squash shows up once per merge
+          dups=$(awk '/^## /{v=$2; sub(/^\[/, "", v); sub(/\].*/, "", v); delete seen} /^\* /{e=$0; sub(/ \(\[[0-9a-f]+\]\(.*$/, "", e); if (seen[e]++) print v ": " e}' CHANGELOG.md)
+          if [ -n "$dups" ]; then
+            printf 'CHANGELOG.md repeats an entry within a release:\n%s\n' "$dups" >&2
+            exit 1
+          fi
 
   test:
     name: test (${{ matrix.suite }})
