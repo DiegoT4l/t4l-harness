@@ -10,7 +10,7 @@ Entorno de las mediciones: WSL2, 10 núcleos, 7 GB de RAM, sin GPU, Go 1.27.3, A
 |---|---|
 | 1. ¿ADK Go como dependencia? | **Sí.** Los nodos de función corren sin modelo. Una ejecución se pausa en un nodo `human` y se reanuda en otro proceso desde SQLite. Los ciclos con máximo de intentos se pueden modelar. Va detrás de un paquete propio para poder cambiarlo. |
 | 2a. ¿CocoIndex como contexto de los nodos `agent`? | **Sí, con lo que ya existe.** `scripts/t4l-search.sh` ya integra `ccc` de forma opcional. El motor lo llamaría al armar el brief, con filtros de lenguaje y ruta por nodo. |
-| 2b. ¿CocoIndex como memoria del grafo? | **Todavía no.** El prototipo funciona, incluso con actualización incremental y borrados, pero a la escala de t4l un `grep` sobre `.t4l/reports` responde lo mismo. Para dejarlo posible, el motor escribe registros estructurados de cada ejecución. |
+| 2b. ¿CocoIndex como memoria del grafo, con consultas entre repositorios? | **Sí, con SQLite como destino y no con una base de grafos.** El motor escribe un registro por ejecución en un almacén por usuario, fuera de los repos, al que solo se agregan registros. CocoIndex lo proyecta a SQLite. Las cuatro consultas entre repos dieron las mismas filas en SQLite y en FalkorDB, con tiempos parecidos, y SQLite no necesita servidor. |
 | 3. ¿Cómo viaja el binario? | **Binarios por plataforma adjuntos al release, descargados en el primer uso con checksum.** Compilar al instalar exige Go, tarda 25 s y descarga 1,1 GB de módulos. |
 | 4. ¿Grafos por repositorio? | **No en v2.0.** CocoIndex no lo exige: los filtros de búsqueda son configuración de cada nodo, y vienen compilados con el harness. |
 
@@ -84,37 +84,70 @@ El cambio a un motor propio con la misma forma se decide si pasa cualquiera de e
 
 Si el script devuelve 3, el brief sale sin esa sección. El `--refresh` en cada transición cuesta menos de 2 s incluso en el repositorio grande. Lo caro es el primer índice, y ese se hace una sola vez con `t4l-search.sh --init`, que `/t4l:setup` ya sugiere cuando `ccc` está instalado.
 
-### 2b. Memoria del grafo (núcleo de CocoIndex)
+### 2b. Memoria del grafo, entre repositorios (núcleo de CocoIndex)
 
-**Prototipo** (`spikes/graph/coco/history.py`, unas 100 líneas, con la API v1: `@coco.fn`, `coco.App`, `mount_each`): lee los `judge_*.md` con el formato de `agents/judge.md` más la lista "Files changed" del implementer. Escribe `Run -[TOUCHED]-> File` en FalkorDB. `query.py` responde "qué ejecuciones tocaron este archivo y qué dijo el judge".
+Hacen falta consultas entre repositorios. La primera versión de esta sección las postergaba; este es el análisis completo.
 
-**Resultados:**
+**Primer prototipo, un solo repo** (`spikes/graph/coco/history.py`, con la API v1: `@coco.fn`, `coco.App`, `mount_each`): lee los `judge_*.md` con el formato de `agents/judge.md` más la lista "Files changed" del implementer, y escribe `Run -[TOUCHED]-> File` en FalkorDB.
 
-- **Funciona:** con tres reportes de ejemplo, la consulta por `hooks/guard.sh` devolvió los dos intentos de bash-guard con su veredicto (`CHANGES_REQUESTED` y `APPROVED`).
-- **Incremental:**
-  - Sin cambios, no reprocesa nada.
-  - Un reporte editado se reprocesa solo, y la arista que ya no corresponde desaparece.
-  - Un reporte borrado elimina su `Run` y los `File` que quedan huérfanos: el grafo pasó de 6 archivos a 4.
+- **Funciona:** la consulta por `hooks/guard.sh` devolvió los dos intentos de bash-guard con su veredicto.
+- **Incremental:** sin cambios no reprocesa nada. Un reporte editado se reprocesa solo, y un reporte borrado elimina su `Run` y los `File` que quedan huérfanos.
 - **Estado:** CocoIndex guarda el suyo en un archivo LMDB local (`COCOINDEX_DB`). No necesita Postgres.
 
-**Costos frente a lo que ya existe:**
+**La fuente no puede ser `.t4l/reports`.** `judge_<feature>.md` se sobrescribe cada vez que el judge vuelve a correr sobre una feature, y `.t4l/` no está versionado, así que se pierde con el clon. Como CocoIndex refleja en el destino lo que desaparece de la fuente, el historial se perdería con ellos. Por eso la fuente de verdad es un almacén por usuario, fuera de los repos, donde cada ejecución deja un registro que nunca se reescribe:
 
-| | CocoIndex + FalkorDB | `grep` sobre `.t4l/reports` |
+```
+<almacén>/runs/<repo>/<id>.json   {"run", "feature", "verdict", "attempts", "files": [...]}
+```
+
+**Segundo prototipo, varios repos** (`history_multi.py`, `query_multi.py`, `make_store.py`): la misma fuente proyectada a dos destinos, FalkorDB (`Repo`, `Run`, `File` y las aristas `IN` y `TOUCHED`) y SQLite (tablas `runs` y `touched`). Se hacen las mismas cuatro preguntas en Cypher y en SQL:
+
+1. Quién tocó una ruta, en cualquier repo.
+2. Qué rutas se tocaron en más de un repo.
+3. La tasa de rechazo y los intentos promedio por repo.
+4. Qué rutas tuvieron un rechazo en un repo y también se tocaron en otro (dos saltos).
+
+Con tres repos de ejemplo, y luego con 20 repos de 500 ejecuciones cada uno (10 000 registros y unos 45 000 archivos tocados, de los cuales cinco rutas se comparten entre todos los repos), **los dos destinos devolvieron exactamente las mismas filas en las cuatro preguntas**.
+
+| Con 10 000 ejecuciones | FalkorDB | SQLite |
 |---|---|---|
-| Responder la consulta | 0,1 s (más 0,3 s de una actualización sin cambios) | 17 ms |
-| Runtime nuevo | entorno de Python de 136 MB, imagen de FalkorDB de 734 MB, 200 MB de RAM | ninguno |
-| Consultas de varios saltos o entre repositorios | sí | no |
+| Carga inicial | 57 s | 34 s |
+| Actualización sin cambios, o agregando una ejecución | 10 a 11 s | 10 s |
+| Modo `live` (un proceso que vigila el almacén) | no aplica, ver abajo | la ejecución nueva o borrada se refleja en 0,05 s; el proceso ocupa unos 92 MB |
+| Consultas 1 a 4, con índice sobre `path` | 23 ms, 24 ms, 7 ms, 30 ms | 4 ms, 12 ms, 2 ms, 33 ms |
+| Runtime aparte | contenedor (imagen de 734 MB, 166 MB de RAM) | ninguno: un archivo de 8 MB |
+| Estado de CocoIndex | 44 MB | 26 MB |
 
-Engram guarda decisiones y hallazgos como texto. No responde preguntas estructurales del tipo "qué features tocaron este archivo", pero a la escala de t4l, con decenas de reportes por repositorio, `grep` sí.
+Lo que salió mal, y por qué pesa en la decisión:
 
-**Recomendación:** no lo incluimos en v2.0, pero lo dejamos posible. El motor escribe un registro estructurado por ejecución en `.t4l/runs/<id>.json`: nodos recorridos, rutas, intentos, veredictos y archivos tocados. Con eso, una app de CocoIndex como la del prototipo se puede agregar después como componente opcional, sin tocar el motor. Se reconsidera cuando haga falta consultar entre repositorios o con varios saltos, por ejemplo "features que tocaron archivos que hoy fallan en mutation".
+- **Los nodos compartidos del grafo fallan en silencio.** En la primera carga a FalkorDB, cada ejecución declaraba su `Repo` y sus `File`. Muchas ejecuciones declaran los mismos nodos (`go.mod`, el repo), así que compiten por ser dueñas de cada uno ("pre_commit gave up after 8 retries waiting for concurrent ownership transfer"). El 73 % de los registros falló y **el proceso terminó con código 0**.
+  - Sin declarar esos nodos, las aristas los crean solas con `MERGE`, pero quedan solo con `id`, sin `path`. Las consultas fueron rápidas porque no devolvían nada.
+  - La forma correcta es la del ejemplo "docs to knowledge graph" de CocoIndex: una fase lee cada registro (`coco.map`) y un solo componente declara los nodos compartidos ya deduplicados. Esa forma no admite el modo `live`, que necesita un componente por archivo (`mount_each`).
+  - En SQLite el problema no existe, porque cada fila pertenece a una sola ejecución.
+- **La consulta de dos saltos depende de cómo se escribe**, no del destino. Escrita de forma ingenua, cruzaba todas las ejecuciones que tocaron `go.mod` contra todas las demás, y agotó el tiempo en FalkorDB y tardó 2,3 s en SQLite. Deduplicando primero por ruta y repo, bajó a unos 30 ms en los dos.
+- **Sin modo `live`, cada actualización cuesta unos 10 s con 10 000 ejecuciones**, porque CocoIndex recorre el almacén entero. Con el modo `live`, el cambio se refleja casi al instante.
+
+Hay otra opción, que el motor escriba en SQLite directamente desde Go: sin Python y con la fila disponible al instante. Si con eso alcanza, CocoIndex no aporta nada a las consultas estructuradas. Donde sí aporta es en lo que esa opción no cubre:
+
+- **Más fuentes:** además de los registros del motor, puede leer specs y reportes en Markdown de cada repo.
+- **Una proyección que se reconstruye:** si se corrige o se borra un registro, el destino se actualiza con él.
+- **Embeddings en el mismo pipeline:** el conector SQLite tiene tablas `vec0`. Con eso se podría buscar por similitud entre repos, por ejemplo "¿ya resolvimos algo parecido en otro repo?". `ccc` no lo hace, porque indexa cada proyecto por separado. Esto **no se probó** en el spike.
+
+**Recomendación:**
+
+- **Almacén:** `${XDG_DATA_HOME:-~/.local/share}/t4l/runs/<repo>/<id>.json`, escrito por el motor al cerrar cada ejecución. El registro lleva nodos recorridos, rutas, intentos, veredictos y archivos tocados. El almacén no va en `CLAUDE_PLUGIN_DATA`: ese directorio pertenece a la instalación del plugin, y el historial es del usuario, independiente de cómo esté instalado t4l.
+- **Identidad del repo:** no puede ser el nombre de la carpeta, porque dos clones pueden llamarse igual. Hace falta un identificador estable, por ejemplo la URL de `origin` normalizada o el hash del primer commit.
+- **Proyección:** CocoIndex hacia `history.db` (SQLite), en el mismo directorio que el almacén. Por defecto se actualiza en segundo plano al cerrar cada ejecución. El modo `live` queda como opción para quien lo quiera siempre al día.
+- **Consultas:** `t4l history` en el binario de Go lee `history.db`; Go ya tiene SQLite por ADK. Trae las cuatro preguntas del prototipo como subcomandos y permite SQL libre para el resto.
+- **Sin CocoIndex:** el almacén se sigue escribiendo, y `t4l history` avisa cómo habilitarlo.
+- **Sin base de grafos por ahora:** FalkorDB no respondió nada que SQL no respondiera, y agrega un contenedor, la restricción de las dos fases y el riesgo de fallar con código 0. Se reconsidera si aparecen consultas de muchos saltos que en SQL se vuelvan ilegibles.
 
 ### La frontera entre Go y Python
 
 | Uso | Frontera |
 |---|---|
 | Contexto de los nodos | El CLI, a través de `t4l-search.sh`, que ya existe y es opcional. |
-| Historial | Un proceso aparte y opcional que lee `.t4l/runs/`. El motor no lo conoce. |
+| Historial | El motor escribe JSON en el almacén. CocoIndex, un proceso aparte, lo proyecta a SQLite. El motor solo lee `history.db`. |
 
 El MCP de `ccc` no hace falta para el motor: el lead y los subagentes ya pueden usar `ccc` por el script.
 
@@ -138,5 +171,5 @@ CocoIndex no obliga a definir grafos por proyecto. Las fuentes del índice de c�
 - La dependencia es ADK Go v2, con la versión fijada, detrás de `internal/graph`. La sesión va en `.t4l/graph.db`.
 - El máximo de intentos va en la salida de cada nodo. ADK no lo trae.
 - El brief de los nodos `agent` incluye los resultados de `t4l-search.sh` con filtros por nodo, si está habilitado.
-- El motor escribe `.t4l/runs/<id>.json`. El historial con CocoIndex queda como un componente opcional posterior.
+- El motor escribe un registro por ejecución en `${XDG_DATA_HOME:-~/.local/share}/t4l/runs/<repo>/<id>.json`, con un identificador estable de repo. CocoIndex lo proyecta a `history.db` (SQLite), y `t4l history` lo consulta entre repos.
 - Los binarios por plataforma se adjuntan al release y se descargan en el primer uso con checksum.

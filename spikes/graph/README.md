@@ -25,3 +25,17 @@ uv venv coco-venv --python 3.12 && uv pip install --python coco-venv/bin/python 
 COCOINDEX_DB=state.lmdb coco-venv/bin/python coco/history.py <reports dir>
 coco-venv/bin/python coco/query.py hooks/guard.sh
 ```
+
+The cross-repository version reads a store with one record per run (`runs/<repo>/<id>.json`), outside any repository. It projects the store to FalkorDB or to SQLite, and `query_multi.py` asks the same four questions of both.
+
+```sh
+coco-venv/bin/python coco/make_store.py store scale 20 500     # or: store sample
+COCOINDEX_DB=state-sqlite.lmdb coco-venv/bin/python coco/history_multi.py sqlite store history.sqlite
+COCOINDEX_DB=state-falkor.lmdb coco-venv/bin/python coco/history_multi.py falkor store
+coco-venv/bin/python coco/query_multi.py sqlite go.mod history.sqlite
+coco-venv/bin/python coco/query_multi.py falkor go.mod
+```
+
+`T4L_SPIKE_LIVE=1` keeps `history_multi.py` running and watching the store. Only the SQLite projection supports it.
+
+The query times in the report assume an index on `path`: `CREATE INDEX touched_path ON touched(path)` in SQLite, `CREATE INDEX FOR (f:File) ON (f.path)` in FalkorDB.
